@@ -458,8 +458,22 @@ func TokenAuth() func(c *gin.Context) {
 		userGroup := userCache.Group
 		tokenGroup := token.Group
 		if tokenGroup != "" {
-			// check common.UserUsableGroups[userGroup]
-			if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
+			_, entitlementManaged, policyErr := model.GetAccessGroupFundingType(tokenGroup)
+			if policyErr != nil {
+				abortWithOpenAiMessage(c, http.StatusInternalServerError, "查询权益分组失败")
+				return
+			}
+			if entitlementManaged {
+				allowed, entitlementErr := model.UserCanUseEntitlementGroup(token.UserId, tokenGroup)
+				if entitlementErr != nil {
+					abortWithOpenAiMessage(c, http.StatusInternalServerError, "查询权益分组失败")
+					return
+				}
+				if !allowed {
+					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("当前权益无权访问 %s 分组", tokenGroup))
+					return
+				}
+			} else if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
 				abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问 %s 分组", tokenGroup))
 				return
 			}

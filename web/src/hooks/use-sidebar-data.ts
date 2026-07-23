@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  Boxes,
   Box,
   CreditCard,
   FileText,
@@ -33,10 +34,12 @@ import {
   User,
   Users,
   Wallet,
+  ShoppingBag,
+  ShieldCheck,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type SidebarData } from '@/components/layout/types'
+import type { SidebarData } from '@/components/layout/types'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -104,6 +107,16 @@ export function useSidebarData(): SidebarData {
         title: t('Personal'),
         items: [
           {
+            title: t('Quota Store'),
+            url: '/store',
+            icon: ShoppingBag,
+          },
+          {
+            title: t('My Entitlements'),
+            url: '/entitlements',
+            icon: ShieldCheck,
+          },
+          {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
@@ -143,6 +156,11 @@ export function useSidebarData(): SidebarData {
             title: t('Subscriptions'),
             url: '/subscriptions',
             icon: CreditCard,
+          },
+          {
+            title: t('Product and Entitlement Center'),
+            url: '/entitlement-center',
+            icon: Boxes,
           },
           {
             title: t('System Info'),

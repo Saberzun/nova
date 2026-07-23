@@ -1,0 +1,565 @@
+package controller
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+func AdminListAccessGroupPolicies(c *gin.Context) {
+	var policies []model.AccessGroupPolicy
+	if err := model.DB.Order("group_name asc").Find(&policies).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, policies)
+}
+
+func AdminUpsertAccessGroupPolicy(c *gin.Context) {
+	var request model.AccessGroupPolicy
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	request.GroupName = strings.TrimSpace(request.GroupName)
+	request.FundingSourceType = strings.TrimSpace(request.FundingSourceType)
+	if request.GroupName == "" {
+		common.ApiErrorMsg(c, "分组不能为空")
+		return
+	}
+	if _, ok := ratio_setting.GetGroupRatioCopy()[request.GroupName]; !ok {
+		common.ApiErrorMsg(c, "New API 分组倍率配置中不存在该分组")
+		return
+	}
+	if request.FundingSourceType != model.EntitlementAssetSubscription &&
+		request.FundingSourceType != model.EntitlementAssetStoredValue &&
+		request.FundingSourceType != model.EntitlementAssetSystemWallet {
+		common.ApiErrorMsg(c, "无效的资金来源类型")
+		return
+	}
+	var existing model.AccessGroupPolicy
+	query := model.DB.Where("group_name = ?", request.GroupName).Limit(1).Find(&existing)
+	if query.Error != nil {
+		common.ApiError(c, query.Error)
+		return
+	}
+	if query.RowsAffected > 0 {
+		if existing.FundingSourceType != request.FundingSourceType {
+			var references int64
+			if err := model.DB.Model(&model.EntitlementTypeGroup{}).
+				Where("access_group_policy_id = ?", existing.Id).Count(&references).Error; err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			if references > 0 {
+				common.ApiErrorMsg(c, "该分组已被权益类型引用，不能改变资金来源")
+				return
+			}
+		}
+		existing.FundingSourceType = request.FundingSourceType
+		if err := model.DB.Save(&existing).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		common.ApiSuccess(c, existing)
+		return
+	}
+	if err := model.DB.Create(&request).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, request)
+}
+
+func AdminListEntitlementTypes(c *gin.Context) {
+	var types []model.EntitlementType
+	if err := model.DB.Preload("Groups").Order("id desc").Find(&types).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, types)
+}
+
+func validateEntitlementType(entitlementType *model.EntitlementType) error {
+	if entitlementType == nil || strings.TrimSpace(entitlementType.Code) == "" || strings.TrimSpace(entitlementType.Name) == "" {
+		return errors.New("权益类型编码和名称不能为空")
+	}
+	if entitlementType.AssetKind != model.EntitlementAssetSubscription && entitlementType.AssetKind != model.EntitlementAssetStoredValue {
+		return errors.New("权益类型必须是 subscription 或 stored_value")
+	}
+	if entitlementType.MeterType == "" {
+		entitlementType.MeterType = model.EntitlementMeterQuota
+	}
+	if entitlementType.MeterType != model.EntitlementMeterQuota {
+		return errors.New("MVP 只支持 quota 计量")
+	}
+	return nil
+}
+
+func AdminCreateEntitlementType(c *gin.Context) {
+	var entitlementType model.EntitlementType
+	if err := c.ShouldBindJSON(&entitlementType); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	entitlementType.Id = 0
+	if err := validateEntitlementType(&entitlementType); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	if err := model.DB.Create(&entitlementType).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, entitlementType)
+}
+
+func AdminUpdateEntitlementType(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var request model.EntitlementType
+	if id <= 0 || c.ShouldBindJSON(&request) != nil {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	var existing model.EntitlementType
+	if err := model.DB.Where("id = ?", id).First(&existing).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var entitlementCount int64
+	if err := model.DB.Model(&model.Entitlement{}).Where("entitlement_type_id = ?", id).Count(&entitlementCount).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if entitlementCount > 0 && (request.Code != existing.Code || request.AssetKind != existing.AssetKind || request.MeterType != existing.MeterType) {
+		common.ApiErrorMsg(c, "已有权益引用后不能修改 code、asset_kind 或 meter_type")
+		return
+	}
+	if err := validateEntitlementType(&request); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	updates := map[string]interface{}{
+		"code":        strings.TrimSpace(request.Code),
+		"name":        strings.TrimSpace(request.Name),
+		"description": request.Description,
+		"asset_kind":  request.AssetKind,
+		"meter_type":  request.MeterType,
+		"status":      request.Status,
+		"updated_at":  common.GetTimestamp(),
+	}
+	if err := model.DB.Model(&existing).Updates(updates).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+type replaceEntitlementTypeGroupsRequest struct {
+	Groups []string `json:"groups"`
+	Reason string   `json:"reason"`
+}
+
+func AdminReplaceEntitlementTypeGroups(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var request replaceEntitlementTypeGroupsRequest
+	if id <= 0 || c.ShouldBindJSON(&request) != nil {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if err := model.ReplaceEntitlementTypeGroups(id, request.Groups, c.GetInt("id"), request.Reason); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+func AdminListEntitlementTypeChangeLogs(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var logs []model.EntitlementTypeChangeLog
+	if id <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if err := model.DB.Where("entitlement_type_id = ?", id).Order("id desc").Limit(200).Find(&logs).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, logs)
+}
+
+func AdminListProducts(c *gin.Context) {
+	var products []model.Product
+	if err := model.DB.Preload("SKUs").Order("sort_order desc, id desc").Find(&products).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, products)
+}
+
+func AdminCreateProduct(c *gin.Context) {
+	var product model.Product
+	if err := c.ShouldBindJSON(&product); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	product.Id = 0
+	if strings.TrimSpace(product.Code) == "" || strings.TrimSpace(product.Name) == "" ||
+		(product.Category != model.ProductCategorySubscription && product.Category != model.ProductCategoryRecharge) {
+		common.ApiErrorMsg(c, "商品编码、名称或分类无效")
+		return
+	}
+	if err := model.DB.Create(&product).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, product)
+}
+
+func AdminUpdateProduct(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var request model.Product
+	if id <= 0 || c.ShouldBindJSON(&request) != nil {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	request.Id = id
+	if err := model.DB.Model(&model.Product{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"code":            strings.TrimSpace(request.Code),
+		"name":            strings.TrimSpace(request.Name),
+		"description":     request.Description,
+		"category":        request.Category,
+		"status":          request.Status,
+		"sort_order":      request.SortOrder,
+		"visibility_rule": request.VisibilityRule,
+		"updated_at":      common.GetTimestamp(),
+	}).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+func validateProductSKU(sku *model.ProductSKU) error {
+	if sku == nil || sku.ProductId <= 0 || sku.EntitlementTypeId <= 0 || strings.TrimSpace(sku.Code) == "" || strings.TrimSpace(sku.Name) == "" {
+		return errors.New("SKU 参数不完整")
+	}
+	if sku.PriceAmountMinor < 0 || sku.GrantTotalQuota <= 0 || sku.GrantDailyQuota < 0 || sku.ValiditySeconds < 0 {
+		return errors.New("SKU 价格或额度无效")
+	}
+	var product model.Product
+	if err := model.DB.Where("id = ?", sku.ProductId).First(&product).Error; err != nil {
+		return err
+	}
+	var entitlementType model.EntitlementType
+	if err := model.DB.Where("id = ?", sku.EntitlementTypeId).First(&entitlementType).Error; err != nil {
+		return err
+	}
+	if product.Category == model.ProductCategorySubscription {
+		if entitlementType.AssetKind != model.EntitlementAssetSubscription || sku.ValiditySeconds <= 0 {
+			return errors.New("订阅 SKU 必须关联 subscription Type 并配置有效期")
+		}
+	} else if product.Category == model.ProductCategoryRecharge {
+		if entitlementType.AssetKind != model.EntitlementAssetStoredValue || sku.ActivationPolicy != model.ActivationPolicyImmediate {
+			return errors.New("充值 SKU 必须关联 stored_value Type 并立即生效")
+		}
+	}
+	return nil
+}
+
+func AdminCreateProductSKU(c *gin.Context) {
+	var sku model.ProductSKU
+	if err := c.ShouldBindJSON(&sku); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	sku.Id = 0
+	if err := validateProductSKU(&sku); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	if err := model.DB.Create(&sku).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, sku)
+}
+
+func AdminUpdateProductSKU(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var sku model.ProductSKU
+	if id <= 0 || c.ShouldBindJSON(&sku) != nil {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	sku.Id = id
+	if err := validateProductSKU(&sku); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	if err := model.DB.Save(&sku).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, sku)
+}
+
+func ListStoreProducts(c *gin.Context) {
+	var products []model.Product
+	if err := model.DB.Preload("SKUs", "status = ?", model.ProductStatusActive).
+		Where("status = ?", model.ProductStatusActive).
+		Order("sort_order desc, id desc").Find(&products).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, products)
+}
+
+type createProductOrderRequest struct {
+	SKUId    int `json:"sku_id"`
+	Quantity int `json:"quantity"`
+}
+
+func CreateStoreOrder(c *gin.Context) {
+	var request createProductOrderRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if request.Quantity == 0 {
+		request.Quantity = 1
+	}
+	order, err := model.CreateProductOrder(c.GetInt("id"), request.SKUId, request.Quantity)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if order.TotalAmountMinor == 0 {
+		if err := model.CompleteProductOrder(order.OrderNo, "", "free"); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		order.Status = model.ProductOrderStatusFulfilled
+	}
+	common.ApiSuccess(c, order)
+}
+
+func ListStoreOrders(c *gin.Context) {
+	var orders []model.ProductOrder
+	if err := model.DB.Preload("Items").Where("user_id = ?", c.GetInt("id")).Order("id desc").Find(&orders).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, orders)
+}
+
+func AdminListProductOrders(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	query := model.DB.Model(&model.ProductOrder{})
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if userId, _ := strconv.Atoi(c.Query("user_id")); userId > 0 {
+		query = query.Where("user_id = ?", userId)
+	}
+	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
+		query = query.Where("order_no LIKE ?", "%"+keyword+"%")
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var orders []model.ProductOrder
+	if err := query.Preload("Items").Order("id desc").
+		Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&orders).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(orders)
+	common.ApiSuccess(c, pageInfo)
+}
+
+type completeProductOrderRequest struct {
+	ProviderTradeNo string `json:"provider_trade_no"`
+	PaymentMethod   string `json:"payment_method"`
+}
+
+func AdminCompleteProductOrder(c *gin.Context) {
+	var request completeProductOrderRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.CompleteProductOrder(c.Param("order_no"), request.ProviderTradeNo, request.PaymentMethod); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+func ListUserEntitlements(c *gin.Context) {
+	userId := c.GetInt("id")
+	if target := c.Param("id"); target != "" {
+		parsed, _ := strconv.Atoi(target)
+		if parsed > 0 {
+			userId = parsed
+		}
+	}
+	var entitlements []model.Entitlement
+	if err := model.DB.Where("user_id = ?", userId).Order("sort_order asc, id desc").Find(&entitlements).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	typeIds := make([]int, 0, len(entitlements))
+	for _, entitlement := range entitlements {
+		typeIds = append(typeIds, entitlement.EntitlementTypeId)
+	}
+	var types []model.EntitlementType
+	if len(typeIds) > 0 {
+		_ = model.DB.Preload("Groups").Where("id IN ?", typeIds).Find(&types).Error
+	}
+	common.ApiSuccess(c, gin.H{"entitlements": entitlements, "types": types})
+}
+
+func ActivateUserEntitlement(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := model.ActivateEntitlement(c.GetInt("id"), id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+type updateEntitlementPrioritiesRequest struct {
+	Ids []int `json:"ids"`
+}
+
+func UpdateEntitlementPriorities(c *gin.Context) {
+	var request updateEntitlementPrioritiesRequest
+	if c.ShouldBindJSON(&request) != nil || len(request.Ids) == 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	seen := make(map[int]struct{}, len(request.Ids))
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		for index, id := range request.Ids {
+			if id <= 0 {
+				return errors.New("权益 ID 无效")
+			}
+			if _, ok := seen[id]; ok {
+				return errors.New("权益 ID 重复")
+			}
+			seen[id] = struct{}{}
+			result := tx.Model(&model.Entitlement{}).Where("id = ? AND user_id = ?", id, c.GetInt("id")).Update("sort_order", index)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return gorm.ErrRecordNotFound
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+func ListUserUsageCharges(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	var charges []model.UsageCharge
+	query := model.DB.Preload("Allocations").Where("user_id = ?", c.GetInt("id")).Order("id desc")
+	if err := query.Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&charges).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var total int64
+	_ = model.DB.Model(&model.UsageCharge{}).Where("user_id = ?", c.GetInt("id")).Count(&total).Error
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(charges)
+	common.ApiSuccess(c, pageInfo)
+}
+
+func AdminGrantEntitlement(c *gin.Context) {
+	userId, _ := strconv.Atoi(c.Param("id"))
+	var request model.Entitlement
+	if userId <= 0 || c.ShouldBindJSON(&request) != nil || request.EntitlementTypeId <= 0 || request.TotalQuota <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	var entitlementType model.EntitlementType
+	if err := model.DB.Where("id = ?", request.EntitlementTypeId).First(&entitlementType).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	now := time.Now().Unix()
+	request.Id = 0
+	request.UserId = userId
+	request.AssetKind = entitlementType.AssetKind
+	request.SourceType = "admin"
+	request.SourceId = c.GetInt("id")
+	if request.State == "" {
+		request.State = model.EntitlementStateActive
+	}
+	if request.State == model.EntitlementStateActive && request.StartAt == 0 {
+		request.StartAt = now
+	}
+	if err := model.DB.Create(&request).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, request)
+}
+
+type adjustEntitlementRequest struct {
+	DeltaQuota     int64  `json:"delta_quota"`
+	Reason         string `json:"reason"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func AdminAdjustEntitlement(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var request adjustEntitlementRequest
+	if id <= 0 || c.ShouldBindJSON(&request) != nil || request.DeltaQuota == 0 || strings.TrimSpace(request.Reason) == "" || strings.TrimSpace(request.IdempotencyKey) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	err := model.AdjustEntitlement(id, c.GetInt("id"), request.DeltaQuota, request.Reason, request.IdempotencyKey)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+func AdminRevokeEntitlement(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if id <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if err := model.RevokeEntitlement(id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
+func formatEntitlementError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("权益操作失败: %s", err.Error())
+}

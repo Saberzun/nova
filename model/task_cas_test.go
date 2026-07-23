@@ -52,6 +52,19 @@ func TestMain(m *testing.M) {
 		&SubscriptionPlan{},
 		&SubscriptionOrder{},
 		&UserSubscription{},
+		&AccessGroupPolicy{},
+		&EntitlementType{},
+		&EntitlementTypeGroup{},
+		&EntitlementTypeChangeLog{},
+		&Product{},
+		&ProductSKU{},
+		&ProductOrder{},
+		&ProductOrderItem{},
+		&Entitlement{},
+		&EntitlementDailyUsage{},
+		&EntitlementAdjustmentLedger{},
+		&UsageCharge{},
+		&UsageChargeAllocation{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
 		&SystemInstance{},
@@ -85,6 +98,19 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM subscription_orders")
 		DB.Exec("DELETE FROM subscription_plans")
 		DB.Exec("DELETE FROM user_subscriptions")
+		DB.Exec("DELETE FROM usage_charge_allocations")
+		DB.Exec("DELETE FROM usage_charges")
+		DB.Exec("DELETE FROM entitlement_daily_usages")
+		DB.Exec("DELETE FROM entitlement_adjustment_ledgers")
+		DB.Exec("DELETE FROM entitlements")
+		DB.Exec("DELETE FROM product_order_items")
+		DB.Exec("DELETE FROM product_orders")
+		DB.Exec("DELETE FROM product_skus")
+		DB.Exec("DELETE FROM products")
+		DB.Exec("DELETE FROM entitlement_type_change_logs")
+		DB.Exec("DELETE FROM entitlement_type_groups")
+		DB.Exec("DELETE FROM entitlement_types")
+		DB.Exec("DELETE FROM access_group_policies")
 		DB.Exec("DELETE FROM perf_metrics")
 		DB.Exec("DELETE FROM system_instances")
 		DB.Exec("DELETE FROM system_task_locks")

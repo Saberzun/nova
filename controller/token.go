@@ -175,6 +175,9 @@ func AddToken(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
 	}
+	if !validateTokenEntitlementGroup(c, c.GetInt("id"), token.Group) {
+		return
+	}
 	// 非无限额度时，检查额度值是否超出有效范围
 	if !token.UnlimitedQuota {
 		if token.RemainQuota < 0 {
@@ -260,6 +263,9 @@ func UpdateToken(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
 	}
+	if statusOnly == "" && !validateTokenEntitlementGroup(c, userId, token.Group) {
+		return
+	}
 	if !token.UnlimitedQuota {
 		if token.RemainQuota < 0 {
 			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
@@ -310,6 +316,31 @@ func UpdateToken(c *gin.Context) {
 		"message": "",
 		"data":    buildMaskedTokenResponse(cleanToken),
 	})
+}
+
+func validateTokenEntitlementGroup(c *gin.Context, userId int, groupName string) bool {
+	groupName = strings.TrimSpace(groupName)
+	if groupName == "" || groupName == "auto" {
+		return true
+	}
+	_, managed, err := model.GetAccessGroupFundingType(groupName)
+	if err != nil {
+		common.ApiError(c, err)
+		return false
+	}
+	if !managed {
+		return true
+	}
+	allowed, err := model.UserCanUseEntitlementGroup(userId, groupName)
+	if err != nil {
+		common.ApiError(c, err)
+		return false
+	}
+	if !allowed {
+		common.ApiErrorMsg(c, fmt.Sprintf("当前权益不允许使用 %s 分组", groupName))
+		return false
+	}
+	return true
 }
 
 type TokenBatch struct {

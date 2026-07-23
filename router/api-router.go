@@ -188,6 +188,51 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/subscription/epay/notify", controller.SubscriptionEpayNotify)
 		apiRouter.GET("/subscription/epay/return", controller.SubscriptionEpayReturn)
 		apiRouter.POST("/subscription/epay/return", anonymousRequestBodyLimit, controller.SubscriptionEpayReturn)
+
+		storeRoute := apiRouter.Group("/store")
+		storeRoute.Use(middleware.UserAuth())
+		{
+			storeRoute.GET("/products", controller.ListStoreProducts)
+			storeRoute.GET("/orders", controller.ListStoreOrders)
+			storeRoute.POST("/orders", middleware.CriticalRateLimit(), controller.CreateStoreOrder)
+			storeRoute.POST("/orders/:order_no/epay", middleware.CriticalRateLimit(), controller.StoreOrderRequestEpay)
+		}
+		apiRouter.POST("/store/epay/notify", anonymousRequestBodyLimit, controller.StoreEpayNotify)
+		apiRouter.GET("/store/epay/notify", controller.StoreEpayNotify)
+		apiRouter.POST("/store/epay/return", anonymousRequestBodyLimit, controller.StoreEpayReturn)
+		apiRouter.GET("/store/epay/return", controller.StoreEpayReturn)
+
+		entitlementRoute := apiRouter.Group("/entitlement")
+		entitlementRoute.Use(middleware.UserAuth())
+		{
+			entitlementRoute.GET("/self", controller.ListUserEntitlements)
+			entitlementRoute.POST("/:id/activate", controller.ActivateUserEntitlement)
+			entitlementRoute.PUT("/priorities", controller.UpdateEntitlementPriorities)
+			entitlementRoute.GET("/usage-charges", controller.ListUserUsageCharges)
+		}
+
+		entitlementAdminRoute := apiRouter.Group("/entitlement/admin")
+		entitlementAdminRoute.Use(middleware.AdminAuth())
+		{
+			entitlementAdminRoute.GET("/group-policies", controller.AdminListAccessGroupPolicies)
+			entitlementAdminRoute.POST("/group-policies", controller.AdminUpsertAccessGroupPolicy)
+			entitlementAdminRoute.GET("/types", controller.AdminListEntitlementTypes)
+			entitlementAdminRoute.POST("/types", controller.AdminCreateEntitlementType)
+			entitlementAdminRoute.PUT("/types/:id", controller.AdminUpdateEntitlementType)
+			entitlementAdminRoute.PUT("/types/:id/groups", controller.AdminReplaceEntitlementTypeGroups)
+			entitlementAdminRoute.GET("/types/:id/change-logs", controller.AdminListEntitlementTypeChangeLogs)
+			entitlementAdminRoute.GET("/products", controller.AdminListProducts)
+			entitlementAdminRoute.POST("/products", controller.AdminCreateProduct)
+			entitlementAdminRoute.PUT("/products/:id", controller.AdminUpdateProduct)
+			entitlementAdminRoute.POST("/skus", controller.AdminCreateProductSKU)
+			entitlementAdminRoute.PUT("/skus/:id", controller.AdminUpdateProductSKU)
+			entitlementAdminRoute.GET("/orders", controller.AdminListProductOrders)
+			entitlementAdminRoute.POST("/orders/:order_no/complete", controller.AdminCompleteProductOrder)
+			entitlementAdminRoute.GET("/users/:id/entitlements", controller.ListUserEntitlements)
+			entitlementAdminRoute.POST("/users/:id/entitlements", controller.AdminGrantEntitlement)
+			entitlementAdminRoute.POST("/entitlements/:id/adjust", controller.AdminAdjustEntitlement)
+			entitlementAdminRoute.POST("/entitlements/:id/revoke", controller.AdminRevokeEntitlement)
+		}
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())
 		{

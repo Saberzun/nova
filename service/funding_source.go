@@ -81,6 +81,66 @@ type SubscriptionFunding struct {
 	PlanTitle       string
 }
 
+// EntitlementFunding uses one UsageCharge with one or more allocation rows.
+// The charge remains tied to the request ID for idempotent settle and refund.
+type EntitlementFunding struct {
+	requestId   string
+	userId      int
+	apiKeyId    int
+	accessGroup string
+	assetKind   string
+	modelName   string
+	amount      int64
+	reserved    int64
+}
+
+func (e *EntitlementFunding) Source() string { return BillingSourceEntitlement }
+
+func (e *EntitlementFunding) PreConsume(_ int) error {
+	result, err := model.PreConsumeEntitlements(
+		e.requestId,
+		e.userId,
+		e.apiKeyId,
+		e.accessGroup,
+		e.assetKind,
+		e.modelName,
+		e.amount,
+	)
+	if err != nil {
+		return err
+	}
+	e.reserved = result.ReservedQuota
+	return nil
+}
+
+func (e *EntitlementFunding) Reserve(amount int) error {
+	if amount <= 0 {
+		return nil
+	}
+	if err := model.IncreaseEntitlementReservation(e.requestId, int64(amount)); err != nil {
+		return err
+	}
+	e.reserved += int64(amount)
+	return nil
+}
+
+func (e *EntitlementFunding) Settle(delta int) error {
+	actual := e.reserved + int64(delta)
+	if actual < 0 {
+		actual = 0
+	}
+	return model.SettleEntitlementCharge(e.requestId, actual)
+}
+
+func (e *EntitlementFunding) Refund() error {
+	if e.reserved <= 0 {
+		return nil
+	}
+	return refundWithRetry(func() error {
+		return model.RefundEntitlementCharge(e.requestId)
+	})
+}
+
 func (s *SubscriptionFunding) Source() string { return BillingSourceSubscription }
 
 func (s *SubscriptionFunding) PreConsume(_ int) error {

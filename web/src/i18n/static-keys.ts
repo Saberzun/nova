@@ -572,4 +572,19 @@ export const STATIC_I18N_KEYS = [
   'This user account is disabled.',
   'Telegram binding failed. Please try again.',
   'Verification scope is missing',
+
+  // Product entitlement states and funding sources
+  'subscription',
+  'stored_value',
+  'system_wallet',
+  'pending',
+  'queued',
+  'active',
+  'depleted',
+  'expired',
+  'cancelled',
+  'fulfilled',
+  'settled',
+  'refunded',
+  'reconciliation_required',
 ] as const

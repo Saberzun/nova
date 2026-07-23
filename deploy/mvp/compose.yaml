@@ -1,0 +1,101 @@
+name: new-api-mvp
+
+services:
+  app:
+    build:
+      context: /opt/codebase/new-api-mvp
+      dockerfile: Dockerfile
+    image: new-api-mvp:local
+    container_name: new-api-mvp
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    environment:
+      SQL_DSN: postgresql://new_api_mvp:${POSTGRES_PASSWORD}@postgres:5432/new_api_mvp
+      REDIS_CONN_STRING: redis://:${REDIS_PASSWORD}@redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      CRYPTO_SECRET: ${CRYPTO_SECRET}
+      SESSION_COOKIE_SECURE: 'true'
+      SESSION_COOKIE_TRUSTED_URL: https://dev.itokenify.com
+      TZ: Asia/Shanghai
+      ERROR_LOG_ENABLED: 'true'
+      BATCH_UPDATE_ENABLED: 'true'
+      NODE_NAME: itokenify-mvp
+    volumes:
+      - ./data:/data
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+      - proxy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1:3000/api/status | grep -q '"success":true'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '5'
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: new-api-mvp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: new_api_mvp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: new_api_mvp
+      TZ: Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U new_api_mvp -d new_api_mvp]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  redis:
+    image: redis:7-alpine
+    container_name: new-api-mvp-redis
+    restart: unless-stopped
+    command: [redis-server, --appendonly, 'yes', --requirepass, '${REDIS_PASSWORD}']
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: [CMD, redis-cli, -a, '${REDIS_PASSWORD}', ping]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  backend:
+    internal: true
+  proxy:
+    name: web-proxy
+    external: true

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -141,7 +142,7 @@ func (s *BillingSession) needsRefundLocked() bool {
 	if sub, ok := s.funding.(*SubscriptionFunding); ok && sub.preConsumed > 0 {
 		return true
 	}
-	return false
+	return s.preConsumedQuota > 0
 }
 
 // GetPreConsumedQuota 返回实际预扣的额度。
@@ -162,12 +163,24 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		return nil
 	}
 
-	if err := s.reserveFunding(delta); err != nil {
-		return err
-	}
-	if err := s.reserveToken(delta); err != nil {
-		s.rollbackFundingReserve(delta)
-		return err
+	if _, ok := s.funding.(*EntitlementFunding); ok {
+		if err := s.reserveToken(delta); err != nil {
+			return err
+		}
+		if err := s.reserveFunding(delta); err != nil {
+			if !s.relayInfo.IsPlayground {
+				_ = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
+			}
+			return err
+		}
+	} else {
+		if err := s.reserveFunding(delta); err != nil {
+			return err
+		}
+		if err := s.reserveToken(delta); err != nil {
+			s.rollbackFundingReserve(delta)
+			return err
+		}
 	}
 
 	s.preConsumedQuota += delta
@@ -215,7 +228,8 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		}
 		// TODO: model 层应定义哨兵错误（如 ErrNoActiveSubscription），用 errors.Is 替代字符串匹配
 		errMsg := err.Error()
-		if strings.Contains(errMsg, "no active subscription") || strings.Contains(errMsg, "subscription quota insufficient") {
+		if errors.Is(err, model.ErrEntitlementQuotaInsufficient) || errors.Is(err, model.ErrEntitlementFundingMismatch) ||
+			strings.Contains(errMsg, "no active subscription") || strings.Contains(errMsg, "subscription quota insufficient") {
 			return types.NewErrorWithStatusCode(fmt.Errorf("订阅额度不足或未配置订阅: %s", errMsg), types.ErrorCodeInsufficientUserQuota, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 		}
 		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
@@ -241,6 +255,17 @@ func (s *BillingSession) reserveFunding(delta int) error {
 		if err := model.PostConsumeUserSubscriptionDelta(funding.subscriptionId, int64(delta)); err != nil {
 			return types.NewErrorWithStatusCode(
 				fmt.Errorf("订阅额度不足或未配置订阅: %s", err.Error()),
+				types.ErrorCodeInsufficientUserQuota,
+				http.StatusForbidden,
+				types.ErrOptionWithSkipRetry(),
+				types.ErrOptionWithNoRecordErrorLog(),
+			)
+		}
+		return nil
+	case *EntitlementFunding:
+		if err := funding.Reserve(delta); err != nil {
+			return types.NewErrorWithStatusCode(
+				fmt.Errorf("权益额度不足: %s", err.Error()),
 				types.ErrorCodeInsufficientUserQuota,
 				http.StatusForbidden,
 				types.ErrOptionWithSkipRetry(),
@@ -396,6 +421,46 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 			return nil, apiErr
 		}
 		return session, nil
+	}
+
+	tryEntitlement := func(assetKind string) (*BillingSession, *types.NewAPIError) {
+		amount := int64(preConsumedQuota)
+		if amount <= 0 {
+			amount = 1
+		}
+		session := &BillingSession{
+			relayInfo: relayInfo,
+			funding: &EntitlementFunding{
+				requestId:   relayInfo.RequestId,
+				userId:      relayInfo.UserId,
+				apiKeyId:    relayInfo.TokenId,
+				accessGroup: relayInfo.UsingGroup,
+				assetKind:   assetKind,
+				modelName:   relayInfo.OriginModelName,
+				amount:      amount,
+			},
+		}
+		if apiErr := session.preConsume(c, int(amount)); apiErr != nil {
+			return nil, apiErr
+		}
+		return session, nil
+	}
+
+	if assetKind, found, err := model.GetAccessGroupFundingType(relayInfo.UsingGroup); err != nil {
+		return nil, types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+	} else if found {
+		switch assetKind {
+		case model.EntitlementAssetSubscription, model.EntitlementAssetStoredValue:
+			return tryEntitlement(assetKind)
+		case model.EntitlementAssetSystemWallet:
+			return tryWallet()
+		default:
+			return nil, types.NewError(
+				fmt.Errorf("unsupported group funding source: %s", assetKind),
+				types.ErrorCodeInvalidRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
 	}
 
 	switch pref {

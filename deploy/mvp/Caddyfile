@@ -1,0 +1,13 @@
+{
+	admin 127.0.0.1:2019
+}
+
+itokenify.com {
+	encode zstd gzip
+	reverse_proxy new-api:3000
+}
+
+dev.itokenify.com {
+	encode zstd gzip
+	reverse_proxy new-api-mvp:3000
+}
