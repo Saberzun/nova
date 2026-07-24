@@ -86,7 +86,7 @@ export function MyEntitlements() {
 
   return (
     <SectionPageLayout>
-      <SectionPageLayout.Title>{t('My Entitlements')}</SectionPageLayout.Title>
+      <SectionPageLayout.Title>{t('My Subscriptions')}</SectionPageLayout.Title>
       <SectionPageLayout.Content>
         <div className='space-y-8'>
           <p className='text-muted-foreground'>

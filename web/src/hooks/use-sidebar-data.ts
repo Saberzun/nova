@@ -112,7 +112,7 @@ export function useSidebarData(): SidebarData {
             icon: ShoppingBag,
           },
           {
-            title: t('My Entitlements'),
+            title: t('My Subscriptions'),
             url: '/entitlements',
             icon: ShieldCheck,
           },

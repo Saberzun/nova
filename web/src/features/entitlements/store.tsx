@@ -8,7 +8,7 @@ License, or (at your option) any later version.
 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -23,8 +23,9 @@ import {
   getTopupInfo,
   payStoreOrderEpay,
 } from './api'
-import { StoreProductCard } from './components/store-product-card'
+import { StoreSKUCard } from './components/store-sku-card'
 import { formatDate, submitEpayForm } from './lib'
+import { buildStoreCatalog } from './store-catalog'
 import type { ProductSKU } from './types'
 
 export function EntitlementStore() {
@@ -43,6 +44,10 @@ export function EntitlementStore() {
     queryKey: ['entitlement-store', 'payment-methods'],
     queryFn: getTopupInfo,
   })
+  const catalog = useMemo(
+    () => buildStoreCatalog(products.data?.data ?? []),
+    [products.data?.data]
+  )
 
   const availableMethods = payment.data?.data?.pay_methods ?? []
   const effectivePaymentMethod =
@@ -103,25 +108,68 @@ export function EntitlementStore() {
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='space-y-8'>
-          <div>
-            <p className='text-muted-foreground mb-4'>
-              {t(
-                'Subscription and recharge quotas are isolated by funding source and can only be used by their configured groups.'
-              )}
-            </p>
-            <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
-              {(products.data?.data ?? []).map((product) => (
-                <StoreProductCard
-                  key={product.id}
-                  product={product}
-                  loading={purchase.isPending}
-                  onPurchase={(sku, quantity) =>
-                    purchase.mutate({ sku, quantity })
-                  }
-                />
-              ))}
+          <section className='space-y-4' aria-labelledby='recharge-heading'>
+            <div>
+              <h2 id='recharge-heading' className='text-xl font-semibold'>
+                {t('Recharge quota')}
+              </h2>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                {t(
+                  'Recharge quota is available for pay-as-you-go access after purchase.'
+                )}
+              </p>
             </div>
-          </div>
+            {catalog.recharge.length > 0 ? (
+              <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
+                {catalog.recharge.map((item) => (
+                  <StoreSKUCard
+                    key={item.sku.id}
+                    product={item.product}
+                    sku={item.sku}
+                    featured
+                    loading={purchase.isPending}
+                    onPurchase={(sku, quantity) =>
+                      purchase.mutate({ sku, quantity })
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className='text-muted-foreground rounded-xl border border-dashed p-6 text-sm'>
+                {t('No available SKU')}
+              </p>
+            )}
+          </section>
+
+          <section className='space-y-4' aria-labelledby='subscription-heading'>
+            <div>
+              <h2 id='subscription-heading' className='text-xl font-semibold'>
+                {t('Subscription quota')}
+              </h2>
+              <p className='text-muted-foreground mt-1 text-sm'>
+                {t('Choose a subscription SKU that matches your quota needs.')}
+              </p>
+            </div>
+            {catalog.subscription.length > 0 ? (
+              <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
+                {catalog.subscription.map((item) => (
+                  <StoreSKUCard
+                    key={item.sku.id}
+                    product={item.product}
+                    sku={item.sku}
+                    loading={purchase.isPending}
+                    onPurchase={(sku, quantity) =>
+                      purchase.mutate({ sku, quantity })
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className='text-muted-foreground rounded-xl border border-dashed p-6 text-sm'>
+                {t('No available SKU')}
+              </p>
+            )}
+          </section>
           <section className='space-y-3'>
             <h2 className='text-lg font-semibold'>{t('Recent orders')}</h2>
             <div className='overflow-x-auto rounded-xl border'>
