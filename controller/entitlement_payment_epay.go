@@ -104,6 +104,11 @@ func completeStoreEpay(c *gin.Context) (bool, string) {
 	if err != nil || !verifyInfo.VerifyStatus || verifyInfo.TradeStatus != epay.StatusTradeSuccess {
 		return false, ""
 	}
+	var order model.ProductOrder
+	if err := model.DB.Where("order_no = ?", verifyInfo.ServiceTradeNo).First(&order).Error; err != nil ||
+		!storeOrderAmountMatches(order.TotalAmountMinor, verifyInfo.Money) {
+		return false, verifyInfo.ServiceTradeNo
+	}
 	payload, err := common.Marshal(verifyInfo)
 	if err != nil {
 		return false, verifyInfo.ServiceTradeNo
@@ -118,6 +123,18 @@ func completeStoreEpay(c *gin.Context) (bool, string) {
 		string(payload),
 	)
 	return err == nil, verifyInfo.ServiceTradeNo
+}
+
+func storeOrderAmountMatches(totalAmountMinor int64, paidAmount string) bool {
+	if totalAmountMinor <= 0 {
+		return false
+	}
+	paid, err := decimal.NewFromString(strings.TrimSpace(paidAmount))
+	if err != nil {
+		return false
+	}
+	expected := decimal.NewFromInt(totalAmountMinor).Div(decimal.NewFromInt(100))
+	return paid.Equal(expected)
 }
 
 func StoreEpayNotify(c *gin.Context) {

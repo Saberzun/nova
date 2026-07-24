@@ -157,11 +157,52 @@ func TestEntitlementDailyLimitAndQuantityFulfillment(t *testing.T) {
 		MultiQuantityEnabled: true, Status: ProductStatusActive,
 	}
 	require.NoError(t, DB.Create(&sku).Error)
-	order, err := CreateProductOrder(404, sku.Id, 3)
+	order, err := CreateProductOrder(404, sku.Id, 3, 0)
 	require.NoError(t, err)
 	require.NoError(t, CompleteProductOrder(order.OrderNo, "", "free"))
 	require.NoError(t, CompleteProductOrder(order.OrderNo, "", "free"))
 	var count int64
 	require.NoError(t, DB.Model(&Entitlement{}).Where("source_type = ? AND source_id = ?", "order", order.Id).Count(&count).Error)
 	assert.EqualValues(t, 3, count)
+}
+
+func TestRechargeOrderUsesCustomerAmountAndCreatesOneEntitlement(t *testing.T) {
+	resetEntitlementFixtures(t)
+	typeStored := seedEntitlementType(t, "custom-paygo", EntitlementAssetStoredValue, "gpt-pro-paygo")
+	product := Product{
+		Code: "custom-recharge", Name: "Custom Recharge",
+		Category: ProductCategoryRecharge, Status: ProductStatusActive,
+	}
+	require.NoError(t, DB.Create(&product).Error)
+	sku := ProductSKU{
+		Code:      fmt.Sprintf("custom-recharge-%d", time.Now().UnixNano()),
+		ProductId: product.Id, EntitlementTypeId: typeStored.Id, Name: "Recharge Rule",
+		PriceAmountMinor: 1_000, Currency: "CNY", GrantTotalQuota: 500,
+		GrantDailyQuota: 50, MinRechargeAmountMinor: 1_000, MaxRechargeAmountMinor: 10_000,
+		ActivationPolicy: ActivationPolicyImmediate, Status: ProductStatusActive,
+	}
+	require.NoError(t, DB.Create(&sku).Error)
+
+	order, err := CreateProductOrder(505, sku.Id, 1, 2_500)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2_500, order.TotalAmountMinor)
+	require.Len(t, order.Items, 1)
+	assert.EqualValues(t, 2_500, order.Items[0].UnitPriceAmountMinor)
+	assert.EqualValues(t, 1_250, order.Items[0].GrantTotalQuota)
+	assert.EqualValues(t, 125, order.Items[0].GrantDailyQuota)
+	assert.Equal(t, 1, order.Items[0].Quantity)
+
+	require.NoError(t, CompleteProductOrder(order.OrderNo, "", "free"))
+	var entitlements []Entitlement
+	require.NoError(t, DB.Where("source_type = ? AND source_id = ?", "order", order.Id).Find(&entitlements).Error)
+	require.Len(t, entitlements, 1)
+	assert.EqualValues(t, 1_250, entitlements[0].TotalQuota)
+	assert.EqualValues(t, 125, entitlements[0].DailyQuota)
+
+	_, err = CreateProductOrder(505, sku.Id, 1, 999)
+	assert.ErrorContains(t, err, "outside the allowed range")
+	_, err = CreateProductOrder(505, sku.Id, 1, 10_001)
+	assert.ErrorContains(t, err, "outside the allowed range")
+	_, err = CreateProductOrder(505, sku.Id, 2, 2_500)
+	assert.ErrorContains(t, err, "one pricing rule sku")
 }

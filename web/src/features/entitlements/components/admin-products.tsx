@@ -45,6 +45,8 @@ const skuSchema = z.object({
   price_amount_minor: z.number().int().min(0),
   grant_total_quota: z.number().int().positive(),
   grant_daily_quota: z.number().int().min(0),
+  min_recharge_amount_minor: z.number().int().min(0),
+  max_recharge_amount_minor: z.number().int().min(0),
   validity_seconds: z.number().int().min(0),
   activation_policy: z.enum(['immediate', 'manual', 'deferred']),
   activation_deadline_seconds: z.number().int().min(0),
@@ -87,6 +89,8 @@ export function AdminProducts() {
       price_amount_minor: 0,
       grant_total_quota: 500000,
       grant_daily_quota: 0,
+      min_recharge_amount_minor: 100,
+      max_recharge_amount_minor: 1000000,
       validity_seconds: 2592000,
       activation_policy: 'immediate',
       activation_deadline_seconds: 0,
@@ -124,6 +128,10 @@ export function AdminProducts() {
       toast.success(t('SKU created'))
     },
   })
+  const selectedSKUProduct = (products.data?.data ?? []).find(
+    (product) => product.id === skuForm.watch('product_id')
+  )
+  const isRechargeSKU = selectedSKUProduct?.category === 'recharge'
 
   return (
     <div className='space-y-4'>
@@ -224,7 +232,11 @@ export function AdminProducts() {
               />
               <Input
                 type='number'
-                placeholder={t('Price in cents')}
+                placeholder={
+                  isRechargeSKU
+                    ? t('Recharge pricing basis in cents')
+                    : t('Price in cents')
+                }
                 {...skuForm.register('price_amount_minor', {
                   valueAsNumber: true,
                 })}
@@ -236,6 +248,29 @@ export function AdminProducts() {
                   valueAsNumber: true,
                 })}
               />
+              {isRechargeSKU ? (
+                <>
+                  <p className='text-muted-foreground text-sm sm:col-span-2'>
+                    {t(
+                      'Recharge price and quota define the conversion rate. Customers choose the actual amount at checkout.'
+                    )}
+                  </p>
+                  <Input
+                    type='number'
+                    placeholder={t('Minimum recharge amount in cents')}
+                    {...skuForm.register('min_recharge_amount_minor', {
+                      valueAsNumber: true,
+                    })}
+                  />
+                  <Input
+                    type='number'
+                    placeholder={t('Maximum recharge amount in cents')}
+                    {...skuForm.register('max_recharge_amount_minor', {
+                      valueAsNumber: true,
+                    })}
+                  />
+                </>
+              ) : null}
               <Input
                 type='number'
                 placeholder={t('Grant daily quota')}
@@ -281,15 +316,20 @@ export function AdminProducts() {
                 placeholder={t('Purchase limit, 0 means unlimited')}
                 {...skuForm.register('purchase_limit', { valueAsNumber: true })}
               />
-              <label className='flex items-center gap-2 text-sm'>
-                <Checkbox
-                  checked={skuForm.watch('multi_quantity_enabled')}
-                  onCheckedChange={(checked) =>
-                    skuForm.setValue('multi_quantity_enabled', checked === true)
-                  }
-                />
-                {t('Allow multiple quantities')}
-              </label>
+              {!isRechargeSKU ? (
+                <label className='flex items-center gap-2 text-sm'>
+                  <Checkbox
+                    checked={skuForm.watch('multi_quantity_enabled')}
+                    onCheckedChange={(checked) =>
+                      skuForm.setValue(
+                        'multi_quantity_enabled',
+                        checked === true
+                      )
+                    }
+                  />
+                  {t('Allow multiple quantities')}
+                </label>
+              ) : null}
               <Button type='submit' disabled={saveSKU.isPending}>
                 {t('Create')}
               </Button>
@@ -315,12 +355,24 @@ export function AdminProducts() {
                 >
                   <div className='flex justify-between gap-2'>
                     <strong>{sku.name}</strong>
-                    <span>¥{(sku.price_amount_minor / 100).toFixed(2)}</span>
+                    <span>
+                      {product.category === 'recharge'
+                        ? `${t('Rule')} ¥${(sku.price_amount_minor / 100).toFixed(2)}`
+                        : `¥${(sku.price_amount_minor / 100).toFixed(2)}`}
+                    </span>
                   </div>
                   <p className='text-muted-foreground'>
                     {formatQuota(sku.grant_total_quota)} ·{' '}
                     {sku.activation_policy}
                   </p>
+                  {product.category === 'recharge' ? (
+                    <p className='text-muted-foreground'>
+                      {t('Recharge range: {{min}}–{{max}}', {
+                        min: `¥${(sku.min_recharge_amount_minor / 100).toFixed(2)}`,
+                        max: `¥${(sku.max_recharge_amount_minor / 100).toFixed(2)}`,
+                      })}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </CardContent>

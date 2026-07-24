@@ -27,6 +27,8 @@ const (
 
 	ProductCategorySubscription = "subscription"
 	ProductCategoryRecharge     = "recharge"
+	DefaultRechargeMinAmount    = int64(100)
+	DefaultRechargeMaxAmount    = int64(1_000_000)
 	ProductStatusDraft          = "draft"
 	ProductStatusActive         = "active"
 	ProductStatusPaused         = "paused"
@@ -164,25 +166,27 @@ func (p *Product) BeforeCreate(_ *gorm.DB) error {
 func (p *Product) BeforeUpdate(_ *gorm.DB) error { p.UpdatedAt = common.GetTimestamp(); return nil }
 
 type ProductSKU struct {
-	Id                    int    `json:"id"`
-	Code                  string `json:"code" gorm:"type:varchar(64);uniqueIndex;not null"`
-	ProductId             int    `json:"product_id" gorm:"index;not null"`
-	EntitlementTypeId     int    `json:"entitlement_type_id" gorm:"index;not null"`
-	Name                  string `json:"name" gorm:"type:varchar(128);not null"`
-	PriceAmountMinor      int64  `json:"price_amount_minor" gorm:"bigint;not null"`
-	Currency              string `json:"currency" gorm:"type:varchar(8);not null"`
-	GrantTotalQuota       int64  `json:"grant_total_quota" gorm:"bigint;not null"`
-	GrantDailyQuota       int64  `json:"grant_daily_quota" gorm:"bigint;not null"`
-	ValiditySeconds       int64  `json:"validity_seconds" gorm:"bigint;not null"`
-	ActivationPolicy      string `json:"activation_policy" gorm:"type:varchar(32);not null"`
-	ActivationDeadlineSec int64  `json:"activation_deadline_seconds" gorm:"bigint;not null"`
-	Stock                 int64  `json:"stock" gorm:"bigint;not null"`
-	PurchaseLimit         int    `json:"purchase_limit" gorm:"not null"`
-	MultiQuantityEnabled  bool   `json:"multi_quantity_enabled"`
-	Status                string `json:"status" gorm:"type:varchar(32);index;not null"`
-	SortOrder             int    `json:"sort_order" gorm:"index"`
-	CreatedAt             int64  `json:"created_at" gorm:"bigint"`
-	UpdatedAt             int64  `json:"updated_at" gorm:"bigint"`
+	Id                     int    `json:"id"`
+	Code                   string `json:"code" gorm:"type:varchar(64);uniqueIndex;not null"`
+	ProductId              int    `json:"product_id" gorm:"index;not null"`
+	EntitlementTypeId      int    `json:"entitlement_type_id" gorm:"index;not null"`
+	Name                   string `json:"name" gorm:"type:varchar(128);not null"`
+	PriceAmountMinor       int64  `json:"price_amount_minor" gorm:"bigint;not null"`
+	Currency               string `json:"currency" gorm:"type:varchar(8);not null"`
+	GrantTotalQuota        int64  `json:"grant_total_quota" gorm:"bigint;not null"`
+	GrantDailyQuota        int64  `json:"grant_daily_quota" gorm:"bigint;not null"`
+	MinRechargeAmountMinor int64  `json:"min_recharge_amount_minor" gorm:"bigint;not null;default:0"`
+	MaxRechargeAmountMinor int64  `json:"max_recharge_amount_minor" gorm:"bigint;not null;default:0"`
+	ValiditySeconds        int64  `json:"validity_seconds" gorm:"bigint;not null"`
+	ActivationPolicy       string `json:"activation_policy" gorm:"type:varchar(32);not null"`
+	ActivationDeadlineSec  int64  `json:"activation_deadline_seconds" gorm:"bigint;not null"`
+	Stock                  int64  `json:"stock" gorm:"bigint;not null"`
+	PurchaseLimit          int    `json:"purchase_limit" gorm:"not null"`
+	MultiQuantityEnabled   bool   `json:"multi_quantity_enabled"`
+	Status                 string `json:"status" gorm:"type:varchar(32);index;not null"`
+	SortOrder              int    `json:"sort_order" gorm:"index"`
+	CreatedAt              int64  `json:"created_at" gorm:"bigint"`
+	UpdatedAt              int64  `json:"updated_at" gorm:"bigint"`
 }
 
 func (s *ProductSKU) BeforeCreate(_ *gorm.DB) error {
@@ -202,6 +206,15 @@ func (s *ProductSKU) BeforeCreate(_ *gorm.DB) error {
 }
 
 func (s *ProductSKU) BeforeUpdate(_ *gorm.DB) error { s.UpdatedAt = common.GetTimestamp(); return nil }
+
+func (s *ProductSKU) NormalizeRechargeAmountBounds() {
+	if s.MinRechargeAmountMinor <= 0 {
+		s.MinRechargeAmountMinor = DefaultRechargeMinAmount
+	}
+	if s.MaxRechargeAmountMinor <= 0 {
+		s.MaxRechargeAmountMinor = DefaultRechargeMaxAmount
+	}
+}
 
 type ProductOrder struct {
 	Id               int                `json:"id"`

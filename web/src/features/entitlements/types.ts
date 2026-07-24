@@ -60,6 +60,8 @@ export interface ProductSKU {
   currency: string
   grant_total_quota: number
   grant_daily_quota: number
+  min_recharge_amount_minor: number
+  max_recharge_amount_minor: number
   validity_seconds: number
   activation_policy: 'immediate' | 'manual' | 'deferred'
   activation_deadline_seconds: number

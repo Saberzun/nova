@@ -3,10 +3,12 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -92,7 +94,7 @@ func ReplaceEntitlementTypeGroups(typeId int, groupNames []string, operatorId in
 	})
 }
 
-func CreateProductOrder(userId int, skuId int, quantity int) (*ProductOrder, error) {
+func CreateProductOrder(userId int, skuId int, quantity int, rechargeAmountMinor int64) (*ProductOrder, error) {
 	if userId <= 0 || skuId <= 0 || quantity <= 0 || quantity > 100 {
 		return nil, errors.New("invalid product order")
 	}
@@ -110,13 +112,19 @@ func CreateProductOrder(userId int, skuId int, quantity int) (*ProductOrder, err
 		if err := tx.Where("id = ? AND status = ?", sku.EntitlementTypeId, EntitlementTypeStatusActive).First(&entitlementType).Error; err != nil {
 			return err
 		}
-		if quantity > 1 && !sku.MultiQuantityEnabled {
-			return errors.New("sku does not allow multiple quantities")
-		}
 		if sku.GrantTotalQuota <= 0 || sku.PriceAmountMinor < 0 {
 			return errors.New("invalid sku grant or price")
 		}
+		unitPriceAmountMinor := sku.PriceAmountMinor
+		grantTotalQuota := sku.GrantTotalQuota
+		grantDailyQuota := sku.GrantDailyQuota
 		if product.Category == ProductCategorySubscription {
+			if quantity > 1 && !sku.MultiQuantityEnabled {
+				return errors.New("sku does not allow multiple quantities")
+			}
+			if rechargeAmountMinor != 0 {
+				return errors.New("subscription sku does not accept a recharge amount")
+			}
 			if entitlementType.AssetKind != EntitlementAssetSubscription || sku.ValiditySeconds <= 0 {
 				return errors.New("invalid subscription sku")
 			}
@@ -124,8 +132,42 @@ func CreateProductOrder(userId int, skuId int, quantity int) (*ProductOrder, err
 			if entitlementType.AssetKind != EntitlementAssetStoredValue || sku.ActivationPolicy != ActivationPolicyImmediate {
 				return errors.New("invalid recharge sku")
 			}
+			if quantity != 1 || sku.PriceAmountMinor <= 0 {
+				return errors.New("recharge orders require one pricing rule sku")
+			}
+			sku.NormalizeRechargeAmountBounds()
+			if sku.MaxRechargeAmountMinor < sku.MinRechargeAmountMinor ||
+				rechargeAmountMinor < sku.MinRechargeAmountMinor ||
+				rechargeAmountMinor > sku.MaxRechargeAmountMinor {
+				return errors.New("recharge amount is outside the allowed range")
+			}
+			quotaDecimal := decimal.NewFromInt(sku.GrantTotalQuota).
+				Mul(decimal.NewFromInt(rechargeAmountMinor)).
+				Div(decimal.NewFromInt(sku.PriceAmountMinor))
+			quota, clamp := common.QuotaFromDecimalChecked(quotaDecimal)
+			if clamp != nil {
+				return clamp
+			}
+			if quota <= 0 {
+				return errors.New("recharge amount grants no quota")
+			}
+			unitPriceAmountMinor = rechargeAmountMinor
+			grantTotalQuota = int64(quota)
+			if sku.GrantDailyQuota > 0 {
+				dailyQuotaDecimal := decimal.NewFromInt(sku.GrantDailyQuota).
+					Mul(decimal.NewFromInt(rechargeAmountMinor)).
+					Div(decimal.NewFromInt(sku.PriceAmountMinor))
+				dailyQuota, dailyClamp := common.QuotaFromDecimalChecked(dailyQuotaDecimal)
+				if dailyClamp != nil {
+					return dailyClamp
+				}
+				grantDailyQuota = int64(dailyQuota)
+			}
 		} else {
 			return errors.New("unsupported product category")
+		}
+		if unitPriceAmountMinor > math.MaxInt64/int64(quantity) {
+			return errors.New("product order amount overflow")
 		}
 		if sku.Stock > 0 && sku.Stock < int64(quantity) {
 			return errors.New("sku stock insufficient")
@@ -147,7 +189,7 @@ func CreateProductOrder(userId int, skuId int, quantity int) (*ProductOrder, err
 			OrderNo:          orderNo,
 			UserId:           userId,
 			Status:           ProductOrderStatusPending,
-			TotalAmountMinor: sku.PriceAmountMinor * int64(quantity),
+			TotalAmountMinor: unitPriceAmountMinor * int64(quantity),
 			Currency:         sku.Currency,
 		}
 		if err := tx.Create(&order).Error; err != nil {
@@ -161,9 +203,9 @@ func CreateProductOrder(userId int, skuId int, quantity int) (*ProductOrder, err
 			ProductName:           product.Name,
 			SKUName:               sku.Name,
 			Quantity:              quantity,
-			UnitPriceAmountMinor:  sku.PriceAmountMinor,
-			GrantTotalQuota:       sku.GrantTotalQuota,
-			GrantDailyQuota:       sku.GrantDailyQuota,
+			UnitPriceAmountMinor:  unitPriceAmountMinor,
+			GrantTotalQuota:       grantTotalQuota,
+			GrantDailyQuota:       grantDailyQuota,
 			ValiditySeconds:       sku.ValiditySeconds,
 			ActivationPolicy:      sku.ActivationPolicy,
 			ActivationDeadlineSec: sku.ActivationDeadlineSec,

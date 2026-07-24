@@ -23,6 +23,7 @@ import {
   getTopupInfo,
   payStoreOrderEpay,
 } from './api'
+import { StoreRechargeCard } from './components/store-recharge-card'
 import { StoreSKUCard } from './components/store-sku-card'
 import { formatDate, submitEpayForm } from './lib'
 import { buildStoreCatalog } from './store-catalog'
@@ -53,10 +54,15 @@ export function EntitlementStore() {
   const effectivePaymentMethod =
     paymentMethod || availableMethods[0]?.type || ''
   const purchase = useMutation({
-    mutationFn: async (input: { sku: ProductSKU; quantity: number }) => {
+    mutationFn: async (input: {
+      sku: ProductSKU
+      quantity: number
+      amountMinor?: number
+    }) => {
       const orderResponse = await createStoreOrder({
         sku_id: input.sku.id,
         quantity: input.quantity,
+        amount_minor: input.amountMinor,
       })
       if (!orderResponse.success || !orderResponse.data) {
         throw new Error(orderResponse.message || t('Order creation failed'))
@@ -120,16 +126,19 @@ export function EntitlementStore() {
               </p>
             </div>
             {catalog.recharge.length > 0 ? (
-              <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
+              <div className='grid gap-4 lg:grid-cols-2'>
                 {catalog.recharge.map((item) => (
-                  <StoreSKUCard
+                  <StoreRechargeCard
                     key={item.sku.id}
                     product={item.product}
                     sku={item.sku}
-                    featured
                     loading={purchase.isPending}
-                    onPurchase={(sku, quantity) =>
-                      purchase.mutate({ sku, quantity })
+                    onPurchase={(sku, amountMinor) =>
+                      purchase.mutate({
+                        sku,
+                        quantity: 1,
+                        amountMinor,
+                      })
                     }
                   />
                 ))}

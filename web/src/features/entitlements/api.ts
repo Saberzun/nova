@@ -36,6 +36,7 @@ export async function getStoreOrders(): Promise<ApiResponse<ProductOrder[]>> {
 export async function createStoreOrder(data: {
   sku_id: number
   quantity: number
+  amount_minor?: number
 }): Promise<ApiResponse<ProductOrder>> {
   return (await api.post('/api/store/orders', data)).data
 }

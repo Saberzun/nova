@@ -21,14 +21,12 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { formatQuota } from '@/lib/format'
-import { cn } from '@/lib/utils'
 
 import type { Product, ProductSKU } from '../types'
 
 interface StoreSKUCardProps {
   product: Product
   sku: ProductSKU
-  featured?: boolean
   loading: boolean
   onPurchase: (sku: ProductSKU, quantity: number) => void
 }
@@ -45,13 +43,7 @@ export function StoreSKUCard(props: StoreSKUCardProps) {
   const totalAmount = props.sku.price_amount_minor * quantity
 
   return (
-    <Card
-      className={cn(
-        'flex h-full flex-col overflow-hidden',
-        props.featured &&
-          'border-primary/30 from-primary/8 bg-linear-to-br to-transparent shadow-sm'
-      )}
-    >
+    <Card className='flex h-full flex-col overflow-hidden'>
       <CardHeader className='space-y-3'>
         <div className='flex items-start justify-between gap-3'>
           <div className='min-w-0'>
@@ -60,9 +52,7 @@ export function StoreSKUCard(props: StoreSKUCardProps) {
             </p>
             <CardTitle className='text-xl'>{props.sku.name}</CardTitle>
           </div>
-          <Badge variant={props.featured ? 'default' : 'secondary'}>
-            {props.featured ? t('Recharge quota') : t('Subscription quota')}
-          </Badge>
+          <Badge variant='secondary'>{t('Subscription quota')}</Badge>
         </div>
         {props.product.description ? (
           <p className='text-muted-foreground text-sm leading-6'>

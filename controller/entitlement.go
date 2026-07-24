@@ -271,6 +271,26 @@ func validateProductSKU(sku *model.ProductSKU) error {
 		if entitlementType.AssetKind != model.EntitlementAssetStoredValue || sku.ActivationPolicy != model.ActivationPolicyImmediate {
 			return errors.New("充值 SKU 必须关联 stored_value Type 并立即生效")
 		}
+		if sku.PriceAmountMinor <= 0 {
+			return errors.New("充值 SKU 必须配置大于零的计价基准")
+		}
+		sku.NormalizeRechargeAmountBounds()
+		if sku.MinRechargeAmountMinor < model.DefaultRechargeMinAmount ||
+			sku.MaxRechargeAmountMinor < sku.MinRechargeAmountMinor ||
+			sku.MaxRechargeAmountMinor > model.DefaultRechargeMaxAmount {
+			return errors.New("充值金额范围无效")
+		}
+		if sku.Status != model.ProductStatusArchived {
+			var existing int64
+			if err := model.DB.Model(&model.ProductSKU{}).
+				Where("product_id = ? AND id <> ? AND status <> ?", sku.ProductId, sku.Id, model.ProductStatusArchived).
+				Count(&existing).Error; err != nil {
+				return err
+			}
+			if existing > 0 {
+				return errors.New("充值商品只能配置一个有效 SKU 作为计价规则")
+			}
+		}
 	}
 	return nil
 }
@@ -320,12 +340,21 @@ func ListStoreProducts(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	for productIndex := range products {
+		if products[productIndex].Category != model.ProductCategoryRecharge {
+			continue
+		}
+		for skuIndex := range products[productIndex].SKUs {
+			products[productIndex].SKUs[skuIndex].NormalizeRechargeAmountBounds()
+		}
+	}
 	common.ApiSuccess(c, products)
 }
 
 type createProductOrderRequest struct {
-	SKUId    int `json:"sku_id"`
-	Quantity int `json:"quantity"`
+	SKUId       int   `json:"sku_id"`
+	Quantity    int   `json:"quantity"`
+	AmountMinor int64 `json:"amount_minor"`
 }
 
 func CreateStoreOrder(c *gin.Context) {
@@ -337,7 +366,7 @@ func CreateStoreOrder(c *gin.Context) {
 	if request.Quantity == 0 {
 		request.Quantity = 1
 	}
-	order, err := model.CreateProductOrder(c.GetInt("id"), request.SKUId, request.Quantity)
+	order, err := model.CreateProductOrder(c.GetInt("id"), request.SKUId, request.Quantity, request.AmountMinor)
 	if err != nil {
 		common.ApiError(c, err)
 		return

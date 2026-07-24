@@ -10,7 +10,7 @@ License, or (at your option) any later version.
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import { buildStoreCatalog } from '../store-catalog'
+import { buildStoreCatalog, calculateRechargeQuota } from '../store-catalog'
 import type { Product, ProductSKU } from '../types'
 
 function createSKU(id: number, sortOrder: number): ProductSKU {
@@ -24,6 +24,8 @@ function createSKU(id: number, sortOrder: number): ProductSKU {
     currency: 'CNY',
     grant_total_quota: 100,
     grant_daily_quota: 0,
+    min_recharge_amount_minor: 100,
+    max_recharge_amount_minor: 1_000_000,
     validity_seconds: 0,
     activation_policy: 'immediate',
     activation_deadline_seconds: 0,
@@ -86,5 +88,28 @@ describe('quota store catalog layout', () => {
       catalog.subscription.map((item) => item.sku.id),
       [11, 12, 23]
     )
+  })
+
+  test('uses one pricing rule SKU for each recharge product', () => {
+    const recharge = createProduct(1, 'recharge', 1, [
+      createSKU(12, 20),
+      createSKU(11, 10),
+    ])
+
+    const catalog = buildStoreCatalog([recharge])
+
+    assert.deepEqual(
+      catalog.recharge.map((item) => item.sku.id),
+      [11]
+    )
+  })
+
+  test('calculates recharge quota from the selected amount and pricing rule', () => {
+    const sku = createSKU(11, 1)
+    sku.price_amount_minor = 1_000
+    sku.grant_total_quota = 550
+
+    assert.equal(calculateRechargeQuota(sku, 2_500), 1_375)
+    assert.equal(calculateRechargeQuota(sku, 0), 0)
   })
 })

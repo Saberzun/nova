@@ -19,6 +19,22 @@ export interface StoreCatalog {
   subscription: StoreCatalogItem[]
 }
 
+export function calculateRechargeQuota(
+  sku: ProductSKU,
+  amountMinor: number
+): number {
+  if (
+    amountMinor <= 0 ||
+    sku.price_amount_minor <= 0 ||
+    sku.grant_total_quota <= 0
+  ) {
+    return 0
+  }
+  return Math.round(
+    (sku.grant_total_quota * amountMinor) / sku.price_amount_minor
+  )
+}
+
 export function buildStoreCatalog(products: Product[]): StoreCatalog {
   const catalog: StoreCatalog = { recharge: [], subscription: [] }
   const orderedProducts = [...products].sort(
@@ -29,11 +45,15 @@ export function buildStoreCatalog(products: Product[]): StoreCatalog {
     const orderedSKUs = [...(product.skus ?? [])].sort(
       (left, right) => left.sort_order - right.sort_order || left.id - right.id
     )
-    const target =
-      product.category === 'recharge' ? catalog.recharge : catalog.subscription
+    if (product.category === 'recharge') {
+      if (orderedSKUs[0]) {
+        catalog.recharge.push({ product, sku: orderedSKUs[0] })
+      }
+      continue
+    }
 
     for (const sku of orderedSKUs) {
-      target.push({ product, sku })
+      catalog.subscription.push({ product, sku })
     }
   }
 
