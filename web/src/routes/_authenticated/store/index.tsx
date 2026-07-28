@@ -8,9 +8,20 @@ License, or (at your option) any later version.
 */
 
 import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
 
 import { EntitlementStore } from '@/features/entitlements/store'
 
-export const Route = createFileRoute('/_authenticated/store/')({
-  component: EntitlementStore,
+const storeSearchSchema = z.object({
+  pay: z.enum(['success', 'fail']).optional(),
 })
+
+export const Route = createFileRoute('/_authenticated/store/')({
+  component: StoreRoute,
+  validateSearch: storeSearchSchema,
+})
+
+function StoreRoute() {
+  const search = Route.useSearch()
+  return <EntitlementStore initialPaymentResult={search.pay} />
+}

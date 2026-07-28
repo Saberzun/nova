@@ -22,7 +22,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { formatQuota } from '@/lib/format'
 
-import { calculateRechargeQuota } from '../store-catalog'
+import { calculateRechargeQuota, isSKUAvailable } from '../store-catalog'
 import type { Product, ProductSKU } from '../types'
 
 const suggestedAmountsMinor = [1_000, 5_000, 10_000, 20_000]
@@ -58,6 +58,10 @@ export function StoreRechargeCard(props: StoreRechargeCardProps) {
     : 0
   const amountIsValid =
     amountIsInRange && estimatedQuota > 0 && estimatedQuota <= maximumGrantQuota
+  const soldOut = !isSKUAvailable(props.sku)
+  let actionLabel = t('Recharge now')
+  if (props.loading) actionLabel = t('Processing')
+  if (soldOut) actionLabel = t('Sold out')
   const suggestions = useMemo(() => {
     const available = suggestedAmountsMinor.filter(
       (value) => value >= minAmountMinor && value <= maxAmountMinor
@@ -131,10 +135,10 @@ export function StoreRechargeCard(props: StoreRechargeCardProps) {
           </strong>
         </div>
         <Button
-          disabled={!amountIsValid || props.loading}
+          disabled={!amountIsValid || soldOut || props.loading}
           onClick={() => props.onPurchase(props.sku, amountMinor)}
         >
-          {props.loading ? t('Processing') : t('Recharge now')}
+          {actionLabel}
         </Button>
       </CardFooter>
     </Card>

@@ -49,6 +49,20 @@ var auditContentTemplates = map[string]string{
 
 	"subscription.plan_reset":      "Reset active subscriptions for plan ${plan_id}",
 	"subscription.user_plan_reset": "Reset active plan ${plan_id} subscriptions for user ${target_user_id}",
+	"entitlement.type_create":      "Created entitlement type ${code} (ID: ${id})",
+	"entitlement.type_update":      "Updated entitlement type ${id}",
+	"entitlement.type_groups":      "Updated allowed groups for entitlement type ${id}",
+	"entitlement.product_create":   "Created product ${code} (ID: ${id})",
+	"entitlement.product_update":   "Updated product ${id}",
+	"entitlement.sku_create":       "Created SKU ${code} (ID: ${id})",
+	"entitlement.sku_update":       "Updated SKU ${id}",
+	"entitlement.order_complete":   "Manually fulfilled product order ${order_no}",
+	"entitlement.order_cancel":     "Cancelled product order ${order_no}",
+	"entitlement.order_refund":     "Marked product order ${order_no} as refunded",
+	"entitlement.order_reset":      "Reset payment state for product order ${order_no}",
+	"entitlement.grant":            "Granted entitlement ${id} to user ${target_user_id}",
+	"entitlement.adjust":           "Adjusted entitlement ${id} quota by ${delta_quota}",
+	"entitlement.revoke":           "Revoked entitlement ${id}",
 }
 
 // auditContentEN 按 action 模板渲染英文兜底文本；未登记的 action 退回 action 本身。

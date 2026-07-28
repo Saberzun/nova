@@ -13,6 +13,7 @@ import type {
   AccessGroupPolicy,
   ApiResponse,
   Entitlement,
+  EntitlementAdjustment,
   EntitlementType,
   EntitlementTypeChangeLog,
   EpayResponse,
@@ -50,6 +51,10 @@ export async function payStoreOrderEpay(
       payment_method: paymentMethod,
     })
   ).data
+}
+
+export async function cancelStoreOrder(orderNo: string): Promise<ApiResponse> {
+  return (await api.post(`/api/store/orders/${orderNo}/cancel`)).data
 }
 
 export async function getTopupInfo(): Promise<ApiResponse<TopupInfo>> {
@@ -103,6 +108,13 @@ export async function createEntitlementType(
   return (await api.post('/api/entitlement/admin/types', data)).data
 }
 
+export async function updateEntitlementType(
+  id: number,
+  data: Partial<EntitlementType>
+): Promise<ApiResponse> {
+  return (await api.put(`/api/entitlement/admin/types/${id}`, data)).data
+}
+
 export async function replaceTypeGroups(
   id: number,
   groups: string[],
@@ -132,16 +144,34 @@ export async function createProduct(
   return (await api.post('/api/entitlement/admin/products', data)).data
 }
 
+export async function updateProduct(
+  id: number,
+  data: Partial<Product>
+): Promise<ApiResponse> {
+  return (await api.put(`/api/entitlement/admin/products/${id}`, data)).data
+}
+
 export async function createProductSKU(
   data: Partial<ProductSKU>
 ): Promise<ApiResponse<ProductSKU>> {
   return (await api.post('/api/entitlement/admin/skus', data)).data
 }
 
-export async function getAdminOrders(): Promise<
-  ApiResponse<PageData<ProductOrder>>
-> {
-  return (await api.get('/api/entitlement/admin/orders')).data
+export async function updateProductSKU(
+  id: number,
+  data: Partial<ProductSKU>
+): Promise<ApiResponse<ProductSKU>> {
+  return (await api.put(`/api/entitlement/admin/skus/${id}`, data)).data
+}
+
+export async function getAdminOrders(params?: {
+  page?: number
+  page_size?: number
+  status?: string
+  user_id?: number
+  keyword?: string
+}): Promise<ApiResponse<PageData<ProductOrder>>> {
+  return (await api.get('/api/entitlement/admin/orders', { params })).data
 }
 
 export async function completeProductOrder(
@@ -151,6 +181,39 @@ export async function completeProductOrder(
     await api.post(`/api/entitlement/admin/orders/${orderNo}/complete`, {
       provider_trade_no: `manual-${orderNo}`,
       payment_method: 'manual',
+    })
+  ).data
+}
+
+export async function cancelProductOrder(
+  orderNo: string,
+  reason: string
+): Promise<ApiResponse> {
+  return (
+    await api.post(`/api/entitlement/admin/orders/${orderNo}/cancel`, {
+      reason,
+    })
+  ).data
+}
+
+export async function refundProductOrder(
+  orderNo: string,
+  reason: string
+): Promise<ApiResponse> {
+  return (
+    await api.post(`/api/entitlement/admin/orders/${orderNo}/refund`, {
+      reason,
+    })
+  ).data
+}
+
+export async function resetProductOrderPayment(
+  orderNo: string,
+  reason: string
+): Promise<ApiResponse> {
+  return (
+    await api.post(`/api/entitlement/admin/orders/${orderNo}/reset-payment`, {
+      reason,
     })
   ).data
 }
@@ -177,6 +240,14 @@ export async function adjustEntitlement(
 ): Promise<ApiResponse> {
   return (
     await api.post(`/api/entitlement/admin/entitlements/${id}/adjust`, data)
+  ).data
+}
+
+export async function getEntitlementAdjustments(
+  id: number
+): Promise<ApiResponse<EntitlementAdjustment[]>> {
+  return (
+    await api.get(`/api/entitlement/admin/entitlements/${id}/adjustments`)
   ).data
 }
 

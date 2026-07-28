@@ -196,6 +196,7 @@ func SetApiRouter(router *gin.Engine) {
 			storeRoute.GET("/orders", controller.ListStoreOrders)
 			storeRoute.POST("/orders", middleware.CriticalRateLimit(), controller.CreateStoreOrder)
 			storeRoute.POST("/orders/:order_no/epay", middleware.CriticalRateLimit(), controller.StoreOrderRequestEpay)
+			storeRoute.POST("/orders/:order_no/cancel", middleware.CriticalRateLimit(), controller.CancelStoreOrder)
 		}
 		apiRouter.POST("/store/epay/notify", anonymousRequestBodyLimit, controller.StoreEpayNotify)
 		apiRouter.GET("/store/epay/notify", controller.StoreEpayNotify)
@@ -228,9 +229,13 @@ func SetApiRouter(router *gin.Engine) {
 			entitlementAdminRoute.PUT("/skus/:id", controller.AdminUpdateProductSKU)
 			entitlementAdminRoute.GET("/orders", controller.AdminListProductOrders)
 			entitlementAdminRoute.POST("/orders/:order_no/complete", controller.AdminCompleteProductOrder)
+			entitlementAdminRoute.POST("/orders/:order_no/cancel", controller.AdminCancelProductOrder)
+			entitlementAdminRoute.POST("/orders/:order_no/refund", controller.AdminRefundProductOrder)
+			entitlementAdminRoute.POST("/orders/:order_no/reset-payment", controller.AdminResetProductOrderPayment)
 			entitlementAdminRoute.GET("/users/:id/entitlements", controller.ListUserEntitlements)
 			entitlementAdminRoute.POST("/users/:id/entitlements", controller.AdminGrantEntitlement)
 			entitlementAdminRoute.POST("/entitlements/:id/adjust", controller.AdminAdjustEntitlement)
+			entitlementAdminRoute.GET("/entitlements/:id/adjustments", controller.AdminListEntitlementAdjustments)
 			entitlementAdminRoute.POST("/entitlements/:id/revoke", controller.AdminRevokeEntitlement)
 		}
 		optionRoute := apiRouter.Group("/option")

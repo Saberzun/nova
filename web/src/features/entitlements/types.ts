@@ -66,6 +66,7 @@ export interface ProductSKU {
   activation_policy: 'immediate' | 'manual' | 'deferred'
   activation_deadline_seconds: number
   stock: number
+  stock_limited: boolean
   purchase_limit: number
   multi_quantity_enabled: boolean
   status: EntityStatus
@@ -102,8 +103,13 @@ export interface ProductOrder {
   payment_provider: string
   total_amount_minor: number
   currency: string
+  expires_at: number
   created_at: number
+  paid_at: number
   fulfilled_at: number
+  cancelled_at: number
+  refunded_at: number
+  status_reason: string
   items?: ProductOrderItem[]
 }
 
@@ -125,6 +131,15 @@ export interface Entitlement {
   activation_deadline: number
   sort_order: number
   source_type: string
+  created_at: number
+}
+
+export interface EntitlementAdjustment {
+  id: number
+  entitlement_id: number
+  operator_id: number
+  delta_quota: number
+  reason: string
   created_at: number
 }
 

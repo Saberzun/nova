@@ -75,3 +75,16 @@ The current development database uses these example policies:
 balance. `GPT_PRO_PAYGO` allows only the stored-value group. The development
 catalog contains multiple SKUs per entitlement type so that SKU pricing and
 grant rules remain separate from the reusable access policy.
+
+## Product lifecycle behavior
+
+- Unpaid orders expire after 30 minutes and release reserved limited stock.
+- Orders with an initiated payment remain pending for reconciliation so a late
+  payment callback cannot lose a successful customer payment.
+- Administrators can reset an initiated payment after confirming it is unpaid,
+  manually fulfill a paid order, or mark an unused fulfilled order as refunded.
+- Refund recording revokes every unused entitlement granted by the order and
+  releases limited stock. Orders with consumed or reserved quota are rejected.
+- Deferred subscription entitlements become active automatically at their
+  scheduled start time. Expired subscriptions and missed manual-activation
+  deadlines are normalized by the lifecycle task.

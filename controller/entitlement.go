@@ -101,6 +101,11 @@ func validateEntitlementType(entitlementType *model.EntitlementType) error {
 	if entitlementType.MeterType != model.EntitlementMeterQuota {
 		return errors.New("MVP 只支持 quota 计量")
 	}
+	if entitlementType.Status != model.EntitlementTypeStatusActive &&
+		entitlementType.Status != model.EntitlementTypeStatusDisabled &&
+		entitlementType.Status != model.EntitlementTypeStatusArchived {
+		return errors.New("权益类型状态无效")
+	}
 	return nil
 }
 
@@ -111,6 +116,9 @@ func AdminCreateEntitlementType(c *gin.Context) {
 		return
 	}
 	entitlementType.Id = 0
+	if entitlementType.Status == "" {
+		entitlementType.Status = model.EntitlementTypeStatusActive
+	}
 	if err := validateEntitlementType(&entitlementType); err != nil {
 		common.ApiErrorMsg(c, err.Error())
 		return
@@ -119,6 +127,7 @@ func AdminCreateEntitlementType(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.type_create", map[string]interface{}{"id": entitlementType.Id, "code": entitlementType.Code})
 	common.ApiSuccess(c, entitlementType)
 }
 
@@ -147,6 +156,7 @@ func AdminUpdateEntitlementType(c *gin.Context) {
 		common.ApiErrorMsg(c, err.Error())
 		return
 	}
+	nextRevision := existing.Revision + 1
 	updates := map[string]interface{}{
 		"code":        strings.TrimSpace(request.Code),
 		"name":        strings.TrimSpace(request.Name),
@@ -154,12 +164,44 @@ func AdminUpdateEntitlementType(c *gin.Context) {
 		"asset_kind":  request.AssetKind,
 		"meter_type":  request.MeterType,
 		"status":      request.Status,
+		"revision":    nextRevision,
 		"updated_at":  common.GetTimestamp(),
 	}
-	if err := model.DB.Model(&existing).Updates(updates).Error; err != nil {
+	beforeJSON, err := common.Marshal(map[string]interface{}{
+		"code": existing.Code, "name": existing.Name, "description": existing.Description,
+		"asset_kind": existing.AssetKind, "meter_type": existing.MeterType, "status": existing.Status,
+	})
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	afterJSON, err := common.Marshal(map[string]interface{}{
+		"code": updates["code"], "name": updates["name"], "description": updates["description"],
+		"asset_kind": updates["asset_kind"], "meter_type": updates["meter_type"], "status": updates["status"],
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&existing).Updates(updates).Error; err != nil {
+			return err
+		}
+		return tx.Create(&model.EntitlementTypeChangeLog{
+			EntitlementTypeId: id,
+			Revision:          nextRevision,
+			Action:            "update_type",
+			BeforeJSON:        string(beforeJSON),
+			AfterJSON:         string(afterJSON),
+			OperatorId:        c.GetInt("id"),
+			Reason:            "admin update",
+		}).Error
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "entitlement.type_update", map[string]interface{}{"id": id})
 	common.ApiSuccess(c, nil)
 }
 
@@ -179,6 +221,7 @@ func AdminReplaceEntitlementTypeGroups(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.type_groups", map[string]interface{}{"id": id, "reason": request.Reason})
 	common.ApiSuccess(c, nil)
 }
 
@@ -212,8 +255,12 @@ func AdminCreateProduct(c *gin.Context) {
 		return
 	}
 	product.Id = 0
+	if product.Status == "" {
+		product.Status = model.ProductStatusDraft
+	}
 	if strings.TrimSpace(product.Code) == "" || strings.TrimSpace(product.Name) == "" ||
-		(product.Category != model.ProductCategorySubscription && product.Category != model.ProductCategoryRecharge) {
+		(product.Category != model.ProductCategorySubscription && product.Category != model.ProductCategoryRecharge) ||
+		!validProductStatus(product.Status) {
 		common.ApiErrorMsg(c, "商品编码、名称或分类无效")
 		return
 	}
@@ -221,7 +268,13 @@ func AdminCreateProduct(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.product_create", map[string]interface{}{"id": product.Id, "code": product.Code})
 	common.ApiSuccess(c, product)
+}
+
+func validProductStatus(status string) bool {
+	return status == model.ProductStatusDraft || status == model.ProductStatusActive ||
+		status == model.ProductStatusPaused || status == model.ProductStatusArchived
 }
 
 func AdminUpdateProduct(c *gin.Context) {
@@ -231,8 +284,29 @@ func AdminUpdateProduct(c *gin.Context) {
 		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
-	request.Id = id
-	if err := model.DB.Model(&model.Product{}).Where("id = ?", id).Updates(map[string]interface{}{
+	var existing model.Product
+	if err := model.DB.Where("id = ?", id).First(&existing).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if strings.TrimSpace(request.Code) == "" || strings.TrimSpace(request.Name) == "" ||
+		(request.Category != model.ProductCategorySubscription && request.Category != model.ProductCategoryRecharge) ||
+		!validProductStatus(request.Status) {
+		common.ApiErrorMsg(c, "商品编码、名称、分类或状态无效")
+		return
+	}
+	if request.Category != existing.Category {
+		var skuCount int64
+		if err := model.DB.Model(&model.ProductSKU{}).Where("product_id = ?", id).Count(&skuCount).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if skuCount > 0 {
+			common.ApiErrorMsg(c, "已有 SKU 后不能修改商品分类")
+			return
+		}
+	}
+	if err := model.DB.Model(&existing).Updates(map[string]interface{}{
 		"code":            strings.TrimSpace(request.Code),
 		"name":            strings.TrimSpace(request.Name),
 		"description":     request.Description,
@@ -245,6 +319,7 @@ func AdminUpdateProduct(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.product_update", map[string]interface{}{"id": id})
 	common.ApiSuccess(c, nil)
 }
 
@@ -254,6 +329,14 @@ func validateProductSKU(sku *model.ProductSKU) error {
 	}
 	if sku.PriceAmountMinor < 0 || sku.GrantTotalQuota <= 0 || sku.GrantDailyQuota < 0 || sku.ValiditySeconds < 0 {
 		return errors.New("SKU 价格或额度无效")
+	}
+	if !validProductStatus(sku.Status) {
+		return errors.New("SKU 状态无效")
+	}
+	if !sku.StockLimited {
+		sku.Stock = 0
+	} else if sku.Stock < 0 {
+		return errors.New("SKU 库存无效")
 	}
 	var product model.Product
 	if err := model.DB.Where("id = ?", sku.ProductId).First(&product).Error; err != nil {
@@ -302,6 +385,9 @@ func AdminCreateProductSKU(c *gin.Context) {
 		return
 	}
 	sku.Id = 0
+	if sku.Status == "" {
+		sku.Status = model.ProductStatusDraft
+	}
 	if err := validateProductSKU(&sku); err != nil {
 		common.ApiErrorMsg(c, err.Error())
 		return
@@ -310,6 +396,7 @@ func AdminCreateProductSKU(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.sku_create", map[string]interface{}{"id": sku.Id, "code": sku.Code})
 	common.ApiSuccess(c, sku)
 }
 
@@ -320,15 +407,42 @@ func AdminUpdateProductSKU(c *gin.Context) {
 		common.ApiErrorMsg(c, "参数错误")
 		return
 	}
+	var existing model.ProductSKU
+	if err := model.DB.Where("id = ?", id).First(&existing).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	sku.Id = id
 	if err := validateProductSKU(&sku); err != nil {
 		common.ApiErrorMsg(c, err.Error())
 		return
 	}
-	if err := model.DB.Save(&sku).Error; err != nil {
+	if err := model.DB.Model(&existing).Updates(map[string]interface{}{
+		"code":                      strings.TrimSpace(sku.Code),
+		"product_id":                sku.ProductId,
+		"entitlement_type_id":       sku.EntitlementTypeId,
+		"name":                      strings.TrimSpace(sku.Name),
+		"price_amount_minor":        sku.PriceAmountMinor,
+		"currency":                  sku.Currency,
+		"grant_total_quota":         sku.GrantTotalQuota,
+		"grant_daily_quota":         sku.GrantDailyQuota,
+		"min_recharge_amount_minor": sku.MinRechargeAmountMinor,
+		"max_recharge_amount_minor": sku.MaxRechargeAmountMinor,
+		"validity_seconds":          sku.ValiditySeconds,
+		"activation_policy":         sku.ActivationPolicy,
+		"activation_deadline_sec":   sku.ActivationDeadlineSec,
+		"stock":                     sku.Stock,
+		"stock_limited":             sku.StockLimited,
+		"purchase_limit":            sku.PurchaseLimit,
+		"multi_quantity_enabled":    sku.MultiQuantityEnabled,
+		"status":                    sku.Status,
+		"sort_order":                sku.SortOrder,
+		"updated_at":                common.GetTimestamp(),
+	}).Error; err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.sku_update", map[string]interface{}{"id": id})
 	common.ApiSuccess(c, sku)
 }
 
@@ -390,6 +504,14 @@ func ListStoreOrders(c *gin.Context) {
 	common.ApiSuccess(c, orders)
 }
 
+func CancelStoreOrder(c *gin.Context) {
+	if err := model.CancelProductOrder(c.Param("order_no"), c.GetInt("id"), "cancelled by user"); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
 func AdminListProductOrders(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	query := model.DB.Model(&model.ProductOrder{})
@@ -433,6 +555,74 @@ func AdminCompleteProductOrder(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.order_complete", map[string]interface{}{"order_no": c.Param("order_no")})
+	common.ApiSuccess(c, nil)
+}
+
+type productOrderStatusRequest struct {
+	Reason string `json:"reason"`
+}
+
+func AdminCancelProductOrder(c *gin.Context) {
+	var request productOrderStatusRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if strings.TrimSpace(request.Reason) == "" {
+		common.ApiErrorMsg(c, "取消原因不能为空")
+		return
+	}
+	if err := model.CancelProductOrder(c.Param("order_no"), 0, request.Reason); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "entitlement.order_cancel", map[string]interface{}{"order_no": c.Param("order_no"), "reason": request.Reason})
+	common.ApiSuccess(c, nil)
+}
+
+func AdminRefundProductOrder(c *gin.Context) {
+	var request productOrderStatusRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if strings.TrimSpace(request.Reason) == "" {
+		common.ApiErrorMsg(c, "退款原因不能为空")
+		return
+	}
+	if err := model.RefundProductOrder(c.Param("order_no"), c.GetInt("id"), request.Reason); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "entitlement.order_refund", map[string]interface{}{"order_no": c.Param("order_no"), "reason": request.Reason})
+	common.ApiSuccess(c, nil)
+}
+
+func AdminResetProductOrderPayment(c *gin.Context) {
+	var request productOrderStatusRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if strings.TrimSpace(request.Reason) == "" {
+		common.ApiErrorMsg(c, "重置原因不能为空")
+		return
+	}
+	var order model.ProductOrder
+	if err := model.DB.Where("order_no = ?", c.Param("order_no")).First(&order).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if order.Status != model.ProductOrderStatusPending || order.PaymentProvider == "" {
+		common.ApiErrorMsg(c, "订单不处于待对账状态")
+		return
+	}
+	if err := model.ResetProductOrderPaymentPreparation(order.OrderNo, order.UserId, order.PaymentProvider, request.Reason); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "entitlement.order_reset", map[string]interface{}{"order_no": order.OrderNo, "reason": request.Reason})
 	common.ApiSuccess(c, nil)
 }
 
@@ -443,6 +633,10 @@ func ListUserEntitlements(c *gin.Context) {
 		if parsed > 0 {
 			userId = parsed
 		}
+	}
+	if err := model.RefreshUserEntitlementStates(userId); err != nil {
+		common.ApiError(c, err)
+		return
 	}
 	var entitlements []model.Entitlement
 	if err := model.DB.Where("user_id = ?", userId).Order("sort_order asc, id desc").Find(&entitlements).Error; err != nil {
@@ -549,6 +743,7 @@ func AdminGrantEntitlement(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAuditFor(c, userId, "entitlement.grant", map[string]interface{}{"id": request.Id})
 	common.ApiSuccess(c, request)
 }
 
@@ -556,6 +751,20 @@ type adjustEntitlementRequest struct {
 	DeltaQuota     int64  `json:"delta_quota"`
 	Reason         string `json:"reason"`
 	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func AdminListEntitlementAdjustments(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if id <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	var ledgers []model.EntitlementAdjustmentLedger
+	if err := model.DB.Where("entitlement_id = ?", id).Order("id desc").Limit(200).Find(&ledgers).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, ledgers)
 }
 
 func AdminAdjustEntitlement(c *gin.Context) {
@@ -570,6 +779,7 @@ func AdminAdjustEntitlement(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.adjust", map[string]interface{}{"id": id, "delta_quota": request.DeltaQuota, "reason": request.Reason})
 	common.ApiSuccess(c, nil)
 }
 
@@ -583,6 +793,7 @@ func AdminRevokeEntitlement(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	recordManageAudit(c, "entitlement.revoke", map[string]interface{}{"id": id})
 	common.ApiSuccess(c, nil)
 }
 

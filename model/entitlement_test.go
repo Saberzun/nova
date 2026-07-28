@@ -206,3 +206,119 @@ func TestRechargeOrderUsesCustomerAmountAndCreatesOneEntitlement(t *testing.T) {
 	_, err = CreateProductOrder(505, sku.Id, 2, 2_500)
 	assert.ErrorContains(t, err, "one pricing rule sku")
 }
+
+func TestQueuedEntitlementBecomesActiveWhenItsStartTimeArrives(t *testing.T) {
+	resetEntitlementFixtures(t)
+	typeSub := seedEntitlementType(t, "queued-sub", EntitlementAssetSubscription, "queued-sub")
+	entitlement := Entitlement{
+		UserId: 606, EntitlementTypeId: typeSub.Id, AssetKind: typeSub.AssetKind,
+		State: EntitlementStateQueued, TotalQuota: 100, StartAt: GetDBTimestamp() - 1,
+		ExpireAt: GetDBTimestamp() + 3600, ResetTimezone: "Asia/Shanghai",
+	}
+	require.NoError(t, DB.Create(&entitlement).Error)
+
+	result, err := PreConsumeEntitlements("req-queued-active", 606, 1, "queued-sub", EntitlementAssetSubscription, "gpt-5", 10)
+	require.NoError(t, err)
+	assert.EqualValues(t, 10, result.ReservedQuota)
+	require.NoError(t, DB.First(&entitlement, entitlement.Id).Error)
+	assert.Equal(t, EntitlementStateActive, entitlement.State)
+
+	pending := Entitlement{
+		UserId: 606, EntitlementTypeId: typeSub.Id, AssetKind: typeSub.AssetKind,
+		State: EntitlementStatePending, TotalQuota: 100,
+		ActivationDeadline: GetDBTimestamp() - 1, ResetTimezone: "Asia/Shanghai",
+	}
+	require.NoError(t, DB.Create(&pending).Error)
+	require.NoError(t, RefreshUserEntitlementStates(606))
+	require.NoError(t, DB.First(&pending, pending.Id).Error)
+	assert.Equal(t, EntitlementStateExpired, pending.State)
+}
+
+func TestOrderCancellationAndExpirationRestoreReservedStock(t *testing.T) {
+	resetEntitlementFixtures(t)
+	typeSub := seedEntitlementType(t, "stock-sub", EntitlementAssetSubscription, "stock-sub")
+	product := Product{Code: "stock-product", Name: "Stock Product", Category: ProductCategorySubscription, Status: ProductStatusActive}
+	require.NoError(t, DB.Create(&product).Error)
+	sku := ProductSKU{
+		Code: fmt.Sprintf("stock-sku-%d", time.Now().UnixNano()), ProductId: product.Id,
+		EntitlementTypeId: typeSub.Id, Name: "Stock SKU", PriceAmountMinor: 100,
+		GrantTotalQuota: 100, ValiditySeconds: 3600, ActivationPolicy: ActivationPolicyImmediate,
+		Stock: 2, MultiQuantityEnabled: true, Status: ProductStatusActive,
+	}
+	require.NoError(t, DB.Create(&sku).Error)
+
+	order, err := CreateProductOrder(707, sku.Id, 2, 0)
+	require.NoError(t, err)
+	require.NoError(t, DB.First(&sku, sku.Id).Error)
+	assert.Zero(t, sku.Stock)
+	_, err = CreateProductOrder(708, sku.Id, 1, 0)
+	assert.ErrorContains(t, err, "stock insufficient")
+	require.NoError(t, CancelProductOrder(order.OrderNo, 707, "changed mind"))
+	require.NoError(t, CancelProductOrder(order.OrderNo, 707, "changed mind"))
+	require.NoError(t, DB.First(&sku, sku.Id).Error)
+	assert.EqualValues(t, 2, sku.Stock)
+
+	expiredOrder, err := CreateProductOrder(707, sku.Id, 1, 0)
+	require.NoError(t, err)
+	require.NoError(t, DB.Model(&ProductOrder{}).Where("id = ?", expiredOrder.Id).Update("expires_at", GetDBTimestamp()-1).Error)
+	count, err := ExpirePendingProductOrders(10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	require.NoError(t, DB.First(expiredOrder, expiredOrder.Id).Error)
+	assert.Equal(t, ProductOrderStatusCancelled, expiredOrder.Status)
+	require.NoError(t, DB.First(&sku, sku.Id).Error)
+	assert.EqualValues(t, 2, sku.Stock)
+}
+
+func TestProductOrderRefundOnlyAllowsUnusedEntitlements(t *testing.T) {
+	resetEntitlementFixtures(t)
+	typeSub := seedEntitlementType(t, "refund-sub", EntitlementAssetSubscription, "refund-sub")
+	product := Product{Code: "refund-product", Name: "Refund Product", Category: ProductCategorySubscription, Status: ProductStatusActive}
+	require.NoError(t, DB.Create(&product).Error)
+	sku := ProductSKU{
+		Code: fmt.Sprintf("refund-sku-%d", time.Now().UnixNano()), ProductId: product.Id,
+		EntitlementTypeId: typeSub.Id, Name: "Refund SKU", PriceAmountMinor: 100,
+		GrantTotalQuota: 100, ValiditySeconds: 3600, ActivationPolicy: ActivationPolicyImmediate,
+		Stock: 2, Status: ProductStatusActive,
+	}
+	require.NoError(t, DB.Create(&sku).Error)
+
+	refundable, err := CreateProductOrder(808, sku.Id, 1, 0)
+	require.NoError(t, err)
+	require.NoError(t, CompleteProductOrder(refundable.OrderNo, "trade-refund-1", "manual"))
+	require.NoError(t, RefundProductOrder(refundable.OrderNo, 1, "approved refund"))
+	require.NoError(t, DB.First(refundable, refundable.Id).Error)
+	assert.Equal(t, ProductOrderStatusRefunded, refundable.Status)
+	var refundedEntitlement Entitlement
+	require.NoError(t, DB.Where("source_type = ? AND source_id = ?", "order", refundable.Id).First(&refundedEntitlement).Error)
+	assert.Equal(t, EntitlementStateCancelled, refundedEntitlement.State)
+
+	nonRefundable, err := CreateProductOrder(808, sku.Id, 1, 0)
+	require.NoError(t, err)
+	require.NoError(t, CompleteProductOrder(nonRefundable.OrderNo, "trade-refund-2", "manual"))
+	require.NoError(t, DB.Model(&Entitlement{}).Where("source_type = ? AND source_id = ?", "order", nonRefundable.Id).Update("used_quota", 1).Error)
+	err = RefundProductOrder(nonRefundable.OrderNo, 1, "should fail")
+	assert.ErrorContains(t, err, "consumed or reserved")
+}
+
+func TestInitiatedPaymentRequiresReconciliationBeforeCancellation(t *testing.T) {
+	resetEntitlementFixtures(t)
+	typeSub := seedEntitlementType(t, "reconcile-sub", EntitlementAssetSubscription, "reconcile-sub")
+	product := Product{Code: "reconcile-product", Name: "Reconcile Product", Category: ProductCategorySubscription, Status: ProductStatusActive}
+	require.NoError(t, DB.Create(&product).Error)
+	sku := ProductSKU{
+		Code: fmt.Sprintf("reconcile-sku-%d", time.Now().UnixNano()), ProductId: product.Id,
+		EntitlementTypeId: typeSub.Id, Name: "Reconcile SKU", PriceAmountMinor: 100,
+		GrantTotalQuota: 100, ValiditySeconds: 3600, ActivationPolicy: ActivationPolicyImmediate,
+		Status: ProductStatusActive,
+	}
+	require.NoError(t, DB.Create(&sku).Error)
+	order, err := CreateProductOrder(909, sku.Id, 1, 0)
+	require.NoError(t, err)
+	_, err = PrepareProductOrderPayment(order.OrderNo, 909, PaymentProviderEpay, "alipay")
+	require.NoError(t, err)
+	err = CancelProductOrder(order.OrderNo, 909, "unsafe cancel")
+	assert.ErrorContains(t, err, "must be reconciled")
+	require.NoError(t, ResetProductOrderPaymentPreparation(order.OrderNo, 909, PaymentProviderEpay, "confirmed unpaid"))
+	require.NoError(t, CancelProductOrder(order.OrderNo, 909, "confirmed unpaid"))
+}

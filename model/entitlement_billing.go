@@ -93,6 +93,9 @@ type EntitlementPreConsumeResult struct {
 }
 
 func activeEntitlementCandidatesTx(tx *gorm.DB, userId int, accessGroup string, assetKind string, now int64) ([]Entitlement, error) {
+	if err := refreshUserEntitlementStatesTx(tx, userId, now); err != nil {
+		return nil, err
+	}
 	var entitlements []Entitlement
 	query := tx.Model(&Entitlement{}).
 		Select("entitlements.*").

@@ -115,9 +115,66 @@ func entitlementDailyPeriod(now time.Time, timezone string) (int64, int64) {
 	return start.Unix(), start.AddDate(0, 0, 1).Unix()
 }
 
+func refreshUserEntitlementStatesTx(tx *gorm.DB, userId int, now int64) error {
+	if userId <= 0 {
+		return nil
+	}
+	if err := tx.Model(&Entitlement{}).
+		Where("user_id = ? AND state IN ? AND expire_at > 0 AND expire_at <= ? AND reserved_quota = 0", userId, []string{EntitlementStateActive, EntitlementStateQueued}, now).
+		Update("state", EntitlementStateExpired).Error; err != nil {
+		return err
+	}
+	if err := tx.Model(&Entitlement{}).
+		Where("user_id = ? AND state = ? AND activation_deadline > 0 AND activation_deadline <= ?", userId, EntitlementStatePending, now).
+		Update("state", EntitlementStateExpired).Error; err != nil {
+		return err
+	}
+	return tx.Model(&Entitlement{}).
+		Where("user_id = ? AND state = ? AND start_at > 0 AND start_at <= ? AND (expire_at = 0 OR expire_at > ?)", userId, EntitlementStateQueued, now, now).
+		Update("state", EntitlementStateActive).Error
+}
+
+func RefreshUserEntitlementStates(userId int) error {
+	if userId <= 0 {
+		return nil
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		return refreshUserEntitlementStatesTx(tx, userId, getDBTimestampTx(tx))
+	})
+}
+
+func RefreshDueEntitlementStates(limit int) (int, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	var userIds []int
+	now := GetDBTimestamp()
+	err := DB.Model(&Entitlement{}).
+		Distinct("user_id").
+		Where("(state IN ? AND expire_at > 0 AND expire_at <= ? AND reserved_quota = 0) OR (state = ? AND activation_deadline > 0 AND activation_deadline <= ?) OR (state = ? AND start_at > 0 AND start_at <= ? AND (expire_at = 0 OR expire_at > ?))",
+			[]string{EntitlementStateActive, EntitlementStateQueued}, now,
+			EntitlementStatePending, now,
+			EntitlementStateQueued, now, now).
+		Order("user_id asc").Limit(limit).Pluck("user_id", &userIds).Error
+	if err != nil {
+		return 0, err
+	}
+	updatedUsers := 0
+	for _, userId := range userIds {
+		if err := RefreshUserEntitlementStates(userId); err != nil {
+			return updatedUsers, err
+		}
+		updatedUsers++
+	}
+	return updatedUsers, nil
+}
+
 func GetUserEntitlementGroups(userId int) ([]string, error) {
 	if userId <= 0 {
 		return nil, nil
+	}
+	if err := RefreshUserEntitlementStates(userId); err != nil {
+		return nil, err
 	}
 	now := GetDBTimestamp()
 	var groups []string
@@ -141,6 +198,9 @@ func GetUserEntitlementGroups(userId int) ([]string, error) {
 func UserCanUseEntitlementGroup(userId int, groupName string) (bool, error) {
 	if userId <= 0 || strings.TrimSpace(groupName) == "" {
 		return false, nil
+	}
+	if err := RefreshUserEntitlementStates(userId); err != nil {
+		return false, err
 	}
 	now := GetDBTimestamp()
 	var count int64

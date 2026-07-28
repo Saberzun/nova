@@ -169,7 +169,7 @@ func CreateProductOrder(userId int, skuId int, quantity int, rechargeAmountMinor
 		if unitPriceAmountMinor > math.MaxInt64/int64(quantity) {
 			return errors.New("product order amount overflow")
 		}
-		if sku.Stock > 0 && sku.Stock < int64(quantity) {
+		if sku.StockLimited && sku.Stock < int64(quantity) {
 			return errors.New("sku stock insufficient")
 		}
 		if sku.PurchaseLimit > 0 {
@@ -191,6 +191,7 @@ func CreateProductOrder(userId int, skuId int, quantity int, rechargeAmountMinor
 			Status:           ProductOrderStatusPending,
 			TotalAmountMinor: unitPriceAmountMinor * int64(quantity),
 			Currency:         sku.Currency,
+			ExpiresAt:        getDBTimestampTx(tx) + ProductOrderPaymentTimeout,
 		}
 		if err := tx.Create(&order).Error; err != nil {
 			return err
@@ -209,11 +210,12 @@ func CreateProductOrder(userId int, skuId int, quantity int, rechargeAmountMinor
 			ValiditySeconds:       sku.ValiditySeconds,
 			ActivationPolicy:      sku.ActivationPolicy,
 			ActivationDeadlineSec: sku.ActivationDeadlineSec,
+			StockReserved:         sku.StockLimited,
 		}
 		if err := tx.Create(&item).Error; err != nil {
 			return err
 		}
-		if sku.Stock > 0 {
+		if sku.StockLimited {
 			result := tx.Model(&ProductSKU{}).Where("id = ? AND stock >= ?", sku.Id, quantity).
 				Update("stock", gorm.Expr("stock - ?", quantity))
 			if result.Error != nil {
@@ -245,6 +247,7 @@ func PrepareProductOrderPayment(orderNo string, userId int, paymentProvider stri
 		return nil, errors.New("invalid product order payment")
 	}
 	var prepared ProductOrder
+	expired := false
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var order ProductOrder
 		if err := lockForUpdate(tx).Where("order_no = ? AND user_id = ?", orderNo, userId).First(&order).Error; err != nil {
@@ -252,6 +255,13 @@ func PrepareProductOrderPayment(orderNo string, userId int, paymentProvider stri
 		}
 		if order.Status != ProductOrderStatusPending {
 			return fmt.Errorf("order cannot be paid from status %s", order.Status)
+		}
+		if order.ExpiresAt > 0 && order.ExpiresAt <= getDBTimestampTx(tx) {
+			if err := cancelProductOrderTx(tx, &order, "payment timeout"); err != nil {
+				return err
+			}
+			expired = true
+			return nil
 		}
 		if order.TotalAmountMinor <= 0 {
 			return errors.New("free order does not require payment")
@@ -262,6 +272,7 @@ func PrepareProductOrderPayment(orderNo string, userId int, paymentProvider stri
 		if err := tx.Model(&order).Updates(map[string]interface{}{
 			"payment_provider": paymentProvider,
 			"payment_method":   paymentMethod,
+			"expires_at":       0,
 			"updated_at":       common.GetTimestamp(),
 		}).Error; err != nil {
 			return err
@@ -274,7 +285,33 @@ func PrepareProductOrderPayment(orderNo string, userId int, paymentProvider stri
 	if err != nil {
 		return nil, err
 	}
+	if expired {
+		return nil, ErrProductOrderExpired
+	}
 	return &prepared, nil
+}
+
+func ResetProductOrderPaymentPreparation(orderNo string, userId int, paymentProvider string, reason string) error {
+	orderNo = strings.TrimSpace(orderNo)
+	if orderNo == "" || userId <= 0 || strings.TrimSpace(paymentProvider) == "" {
+		return errors.New("invalid product order payment reset")
+	}
+	result := DB.Model(&ProductOrder{}).
+		Where("order_no = ? AND user_id = ? AND status = ? AND payment_provider = ?", orderNo, userId, ProductOrderStatusPending, paymentProvider).
+		Updates(map[string]interface{}{
+			"payment_provider": "",
+			"payment_method":   "",
+			"expires_at":       GetDBTimestamp() + ProductOrderPaymentTimeout,
+			"status_reason":    strings.TrimSpace(reason),
+			"updated_at":       common.GetTimestamp(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func CompleteProductOrderWithProvider(orderNo string, providerTradeNo string, expectedPaymentProvider string, paymentMethod string, providerPayload string) error {
@@ -282,7 +319,7 @@ func CompleteProductOrderWithProvider(orderNo string, providerTradeNo string, ex
 	if orderNo == "" {
 		return errors.New("order number is empty")
 	}
-	return DB.Transaction(func(tx *gorm.DB) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		var order ProductOrder
 		if err := lockForUpdate(tx).Preload("Items").Where("order_no = ?", orderNo).First(&order).Error; err != nil {
 			return err
@@ -382,6 +419,149 @@ func CompleteProductOrderWithProvider(orderNo string, providerTradeNo string, ex
 		}
 		return tx.Model(&order).Updates(updates).Error
 	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func restoreProductOrderStockTx(tx *gorm.DB, order *ProductOrder) error {
+	if order == nil || order.StockRestored {
+		return nil
+	}
+	if len(order.Items) == 0 {
+		if err := tx.Where("order_id = ?", order.Id).Find(&order.Items).Error; err != nil {
+			return err
+		}
+	}
+	for _, item := range order.Items {
+		if !item.StockReserved || item.Quantity <= 0 {
+			continue
+		}
+		if err := tx.Model(&ProductSKU{}).Where("id = ?", item.SKUId).
+			Update("stock", gorm.Expr("stock + ?", item.Quantity)).Error; err != nil {
+			return err
+		}
+	}
+	order.StockRestored = true
+	return nil
+}
+
+func cancelProductOrderTx(tx *gorm.DB, order *ProductOrder, reason string) error {
+	if order == nil {
+		return errors.New("product order is nil")
+	}
+	if order.Status == ProductOrderStatusCancelled {
+		return nil
+	}
+	if order.Status != ProductOrderStatusPending {
+		return fmt.Errorf("order cannot be cancelled from status %s", order.Status)
+	}
+	if order.PaymentProvider != "" {
+		return errors.New("order payment was initiated and must be reconciled before cancellation")
+	}
+	if err := restoreProductOrderStockTx(tx, order); err != nil {
+		return err
+	}
+	now := getDBTimestampTx(tx)
+	return tx.Model(order).Updates(map[string]interface{}{
+		"status":         ProductOrderStatusCancelled,
+		"status_reason":  strings.TrimSpace(reason),
+		"cancelled_at":   now,
+		"stock_restored": order.StockRestored,
+		"updated_at":     common.GetTimestamp(),
+	}).Error
+}
+
+func CancelProductOrder(orderNo string, userId int, reason string) error {
+	orderNo = strings.TrimSpace(orderNo)
+	if orderNo == "" {
+		return errors.New("order number is empty")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var order ProductOrder
+		query := lockForUpdate(tx).Preload("Items").Where("order_no = ?", orderNo)
+		if userId > 0 {
+			query = query.Where("user_id = ?", userId)
+		}
+		if err := query.First(&order).Error; err != nil {
+			return err
+		}
+		return cancelProductOrderTx(tx, &order, reason)
+	})
+}
+
+func RefundProductOrder(orderNo string, operatorId int, reason string) error {
+	orderNo = strings.TrimSpace(orderNo)
+	reason = strings.TrimSpace(reason)
+	if orderNo == "" || operatorId <= 0 || reason == "" {
+		return errors.New("invalid product order refund")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var order ProductOrder
+		if err := lockForUpdate(tx).Preload("Items").Where("order_no = ?", orderNo).First(&order).Error; err != nil {
+			return err
+		}
+		if order.Status == ProductOrderStatusRefunded {
+			return nil
+		}
+		if order.Status != ProductOrderStatusFulfilled && order.Status != ProductOrderStatusPaid {
+			return fmt.Errorf("order cannot be refunded from status %s", order.Status)
+		}
+		var entitlements []Entitlement
+		if err := lockForUpdate(tx).Where("source_type = ? AND source_id = ?", "order", order.Id).Find(&entitlements).Error; err != nil {
+			return err
+		}
+		for _, entitlement := range entitlements {
+			if entitlement.UsedQuota != 0 || entitlement.ReservedQuota != 0 {
+				return errors.New("order contains consumed or reserved entitlement quota")
+			}
+		}
+		if err := tx.Model(&Entitlement{}).Where("source_type = ? AND source_id = ?", "order", order.Id).
+			Update("state", EntitlementStateCancelled).Error; err != nil {
+			return err
+		}
+		if err := restoreProductOrderStockTx(tx, &order); err != nil {
+			return err
+		}
+		now := getDBTimestampTx(tx)
+		return tx.Model(&order).Updates(map[string]interface{}{
+			"status":             ProductOrderStatusRefunded,
+			"status_reason":      reason,
+			"refunded_at":        now,
+			"refund_operator_id": operatorId,
+			"stock_restored":     order.StockRestored,
+			"updated_at":         common.GetTimestamp(),
+		}).Error
+	})
+}
+
+func ExpirePendingProductOrders(limit int) (int, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	var orderNos []string
+	now := GetDBTimestamp()
+	if err := DB.Model(&ProductOrder{}).
+		Where("status = ? AND payment_provider = ? AND expires_at > 0 AND expires_at <= ?", ProductOrderStatusPending, "", now).
+		Order("id asc").Limit(limit).Pluck("order_no", &orderNos).Error; err != nil {
+		return 0, err
+	}
+	expired := 0
+	for _, orderNo := range orderNos {
+		if err := CancelProductOrder(orderNo, 0, "payment timeout"); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			var current ProductOrder
+			if lookupErr := DB.Select("status").Where("order_no = ?", orderNo).First(&current).Error; lookupErr == nil && current.Status != ProductOrderStatusPending {
+				continue
+			}
+			return expired, err
+		}
+		expired++
+	}
+	return expired, nil
 }
 
 func AdjustEntitlement(entitlementId int, operatorId int, deltaQuota int64, reason string, idempotencyKey string) error {

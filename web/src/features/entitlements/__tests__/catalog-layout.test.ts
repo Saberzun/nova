@@ -10,7 +10,12 @@ License, or (at your option) any later version.
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import { buildStoreCatalog, calculateRechargeQuota } from '../store-catalog'
+import {
+  buildStoreCatalog,
+  calculateRechargeQuota,
+  isSKUAvailable,
+  maximumSKUQuantity,
+} from '../store-catalog'
 import type { Product, ProductSKU } from '../types'
 
 function createSKU(id: number, sortOrder: number): ProductSKU {
@@ -30,6 +35,7 @@ function createSKU(id: number, sortOrder: number): ProductSKU {
     activation_policy: 'immediate',
     activation_deadline_seconds: 0,
     stock: -1,
+    stock_limited: false,
     purchase_limit: 0,
     multi_quantity_enabled: false,
     status: 'active',
@@ -111,5 +117,18 @@ describe('quota store catalog layout', () => {
 
     assert.equal(calculateRechargeQuota(sku, 2_500), 1_375)
     assert.equal(calculateRechargeQuota(sku, 0), 0)
+  })
+
+  test('treats zero limited stock as sold out without affecting unlimited SKUs', () => {
+    const limited = createSKU(11, 1)
+    limited.stock_limited = true
+    limited.stock = 0
+    const unlimited = createSKU(12, 1)
+    unlimited.stock = 0
+
+    assert.equal(isSKUAvailable(limited), false)
+    assert.equal(maximumSKUQuantity(limited), 0)
+    assert.equal(isSKUAvailable(unlimited), true)
+    assert.equal(maximumSKUQuantity(unlimited), 100)
   })
 })

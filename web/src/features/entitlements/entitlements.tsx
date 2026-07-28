@@ -62,14 +62,22 @@ export function MyEntitlements() {
   )
   const activate = useMutation({
     mutationFn: activateEntitlement,
-    onSuccess: async () => {
+    onSuccess: async (response) => {
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
       await queryClient.invalidateQueries({ queryKey: ['entitlements'] })
       toast.success(t('Entitlement activated'))
     },
   })
   const reorder = useMutation({
     mutationFn: updateEntitlementPriorities,
-    onSuccess: async () => {
+    onSuccess: async (response) => {
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
       await queryClient.invalidateQueries({
         queryKey: ['entitlements', 'self'],
       })
@@ -91,9 +99,24 @@ export function MyEntitlements() {
         <div className='space-y-8'>
           <p className='text-muted-foreground'>
             {t(
-              'Entitlements of the same type can be combined for one request. Groups listed on one entitlement share the same remaining quota.'
+              'Your subscriptions are used automatically when you make an eligible API request.'
             )}
           </p>
+          {entitlements.isPending ? (
+            <p className='text-muted-foreground'>
+              {t('Loading subscriptions...')}
+            </p>
+          ) : null}
+          {entitlements.isError ? (
+            <p className='text-destructive'>
+              {t('Failed to load subscriptions')}
+            </p>
+          ) : null}
+          {!entitlements.isPending && ordered.length === 0 ? (
+            <p className='text-muted-foreground rounded-xl border border-dashed p-6'>
+              {t('You do not have any subscriptions or recharge balance yet.')}
+            </p>
+          ) : null}
           <div className='grid gap-4 lg:grid-cols-2'>
             {ordered.map((entitlement, index) => {
               const entitlementType = typeMap.get(
@@ -142,13 +165,11 @@ export function MyEntitlements() {
                         })}
                       </p>
                     </div>
-                    <div className='flex flex-wrap gap-2'>
-                      {(entitlementType?.groups ?? []).map((group) => (
-                        <Badge key={group.id} variant='outline'>
-                          {group.group_name}
-                        </Badge>
-                      ))}
-                    </div>
+                    {entitlementType?.description ? (
+                      <p className='text-muted-foreground text-sm'>
+                        {entitlementType.description}
+                      </p>
+                    ) : null}
                     <dl className='grid grid-cols-2 gap-3 text-sm'>
                       <div>
                         <dt className='text-muted-foreground'>
@@ -205,45 +226,23 @@ export function MyEntitlements() {
             })}
           </div>
           <section className='space-y-3'>
-            <h2 className='text-lg font-semibold'>
-              {t('Usage allocation ledger')}
-            </h2>
+            <h2 className='text-lg font-semibold'>{t('Usage history')}</h2>
             <div className='space-y-2'>
               {(charges.data?.data?.items ?? []).map((charge) => (
-                <details key={charge.id} className='rounded-xl border p-4'>
-                  <summary className='cursor-pointer list-none'>
-                    <div className='flex flex-wrap items-center justify-between gap-3'>
-                      <div>
-                        <strong>{charge.model_name || t('API request')}</strong>
-                        <p className='text-muted-foreground text-xs'>
-                          {charge.access_group} ·{' '}
-                          {formatDate(charge.created_at)}
-                        </p>
-                      </div>
-                      <div className='flex items-center gap-3'>
-                        <span>{formatQuota(charge.settled_quota)}</span>
-                        <Badge variant='secondary'>{t(charge.state)}</Badge>
-                      </div>
+                <div key={charge.id} className='rounded-xl border p-4'>
+                  <div className='flex flex-wrap items-center justify-between gap-3'>
+                    <div>
+                      <strong>{charge.model_name || t('API request')}</strong>
+                      <p className='text-muted-foreground text-xs'>
+                        {formatDate(charge.created_at)}
+                      </p>
                     </div>
-                  </summary>
-                  <div className='mt-4 space-y-2 border-t pt-4'>
-                    {(charge.allocations ?? []).map((allocation) => (
-                      <div
-                        key={allocation.id}
-                        className='bg-muted/50 flex justify-between rounded-lg p-3 text-sm'
-                      >
-                        <span>
-                          {t('Entitlement')} #{allocation.entitlement_id}
-                        </span>
-                        <span>
-                          {formatQuota(allocation.settled_quota)} ·{' '}
-                          {t('Released')}{' '}
-                          {formatQuota(allocation.refunded_quota)}
-                        </span>
-                      </div>
-                    ))}
+                    <div className='flex items-center gap-3'>
+                      <span>{formatQuota(charge.settled_quota)}</span>
+                      <Badge variant='secondary'>{t(charge.state)}</Badge>
+                    </div>
                   </div>
-                </details>
+                </div>
               ))}
             </div>
           </section>

@@ -28,6 +28,11 @@ func StoreOrderRequestEpay(c *gin.Context) {
 		common.ApiErrorMsg(c, "支付方式不存在")
 		return
 	}
+	client := GetEpayClient()
+	if client == nil {
+		common.ApiErrorMsg(c, "当前管理员未配置支付信息")
+		return
+	}
 	order, err := model.PrepareProductOrderPayment(
 		c.Param("order_no"),
 		c.GetInt("id"),
@@ -38,13 +43,14 @@ func StoreOrderRequestEpay(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	paymentReady := false
+	defer func() {
+		if !paymentReady {
+			_ = model.ResetProductOrderPaymentPreparation(order.OrderNo, c.GetInt("id"), model.PaymentProviderEpay, "payment initialization failed")
+		}
+	}()
 	if strings.ToUpper(order.Currency) != "CNY" {
 		common.ApiErrorMsg(c, "易支付目前只支持 CNY 商品")
-		return
-	}
-	client := GetEpayClient()
-	if client == nil {
-		common.ApiErrorMsg(c, "当前管理员未配置支付信息")
 		return
 	}
 	callbackAddress := service.GetCallbackAddress()
@@ -72,6 +78,7 @@ func StoreOrderRequestEpay(c *gin.Context) {
 		common.ApiErrorMsg(c, "拉起支付失败")
 		return
 	}
+	paymentReady = true
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": params, "url": uri})
 }
 

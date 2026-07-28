@@ -35,6 +35,15 @@ export function calculateRechargeQuota(
   )
 }
 
+export function isSKUAvailable(sku: ProductSKU): boolean {
+  return !sku.stock_limited || sku.stock > 0
+}
+
+export function maximumSKUQuantity(sku: ProductSKU): number {
+  if (!sku.stock_limited) return 100
+  return Math.min(100, Math.max(0, sku.stock))
+}
+
 export function buildStoreCatalog(products: Product[]): StoreCatalog {
   const catalog: StoreCatalog = { recharge: [], subscription: [] }
   const orderedProducts = [...products].sort(

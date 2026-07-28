@@ -22,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { formatQuota } from '@/lib/format'
 
+import { isSKUAvailable, maximumSKUQuantity } from '../store-catalog'
 import type { Product, ProductSKU } from '../types'
 
 interface StoreSKUCardProps {
@@ -41,6 +42,11 @@ export function StoreSKUCard(props: StoreSKUCardProps) {
   const { t } = useTranslation()
   const [quantity, setQuantity] = useState(1)
   const totalAmount = props.sku.price_amount_minor * quantity
+  const soldOut = !isSKUAvailable(props.sku)
+  const maximumQuantity = Math.max(1, maximumSKUQuantity(props.sku))
+  let actionLabel = t('Buy now')
+  if (props.loading) actionLabel = t('Processing')
+  if (soldOut) actionLabel = t('Sold out')
 
   return (
     <Card className='flex h-full flex-col overflow-hidden'>
@@ -100,11 +106,14 @@ export function StoreSKUCard(props: StoreSKUCardProps) {
               className='w-24'
               type='number'
               min={1}
-              max={100}
+              max={maximumQuantity}
               value={quantity}
               onChange={(event) =>
                 setQuantity(
-                  Math.min(100, Math.max(1, Number(event.target.value) || 1))
+                  Math.min(
+                    maximumQuantity,
+                    Math.max(1, Number(event.target.value) || 1)
+                  )
                 )
               }
             />
@@ -122,10 +131,10 @@ export function StoreSKUCard(props: StoreSKUCardProps) {
           </strong>
         </div>
         <Button
-          disabled={props.loading}
+          disabled={soldOut || props.loading}
           onClick={() => props.onPurchase(props.sku, quantity)}
         >
-          {props.loading ? t('Processing') : t('Buy now')}
+          {actionLabel}
         </Button>
       </CardFooter>
     </Card>

@@ -8,15 +8,17 @@ License, or (at your option) any later version.
 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { SectionPageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 
 import {
+  cancelStoreOrder,
   createStoreOrder,
   getStoreOrders,
   getStoreProducts,
@@ -29,7 +31,11 @@ import { formatDate, submitEpayForm } from './lib'
 import { buildStoreCatalog } from './store-catalog'
 import type { ProductSKU } from './types'
 
-export function EntitlementStore() {
+interface EntitlementStoreProps {
+  initialPaymentResult?: 'success' | 'fail'
+}
+
+export function EntitlementStore(props: EntitlementStoreProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [paymentMethod, setPaymentMethod] = useState('')
@@ -53,12 +59,28 @@ export function EntitlementStore() {
   const availableMethods = payment.data?.data?.pay_methods ?? []
   const effectivePaymentMethod =
     paymentMethod || availableMethods[0]?.type || ''
+  let catalogEmptyMessage = t('No available SKU')
+  if (products.isPending) catalogEmptyMessage = t('Loading products...')
+  if (products.isError) catalogEmptyMessage = t('Failed to load products')
+  useEffect(() => {
+    if (props.initialPaymentResult === 'success') {
+      toast.success(t('Payment succeeded and quota has been granted'))
+      void queryClient.invalidateQueries({ queryKey: ['entitlement-store'] })
+    } else if (props.initialPaymentResult === 'fail') {
+      toast.error(t('Payment was not completed'))
+    }
+  }, [props.initialPaymentResult, queryClient, t])
   const purchase = useMutation({
     mutationFn: async (input: {
       sku: ProductSKU
       quantity: number
       amountMinor?: number
     }) => {
+      const expectedAmount =
+        input.amountMinor ?? input.sku.price_amount_minor * input.quantity
+      if (expectedAmount > 0 && !effectivePaymentMethod) {
+        throw new Error(t('No online payment method is available'))
+      }
       const orderResponse = await createStoreOrder({
         sku_id: input.sku.id,
         quantity: input.quantity,
@@ -69,9 +91,6 @@ export function EntitlementStore() {
       }
       if (orderResponse.data.total_amount_minor === 0) {
         return 'free'
-      }
-      if (!effectivePaymentMethod) {
-        throw new Error(t('No online payment method is available'))
       }
       const epay = await payStoreOrderEpay(
         orderResponse.data.order_no,
@@ -92,6 +111,32 @@ export function EntitlementStore() {
       )
     },
     onError: (error) => toast.error(error.message),
+  })
+  const resumePayment = useMutation({
+    mutationFn: async (orderNo: string) => {
+      if (!effectivePaymentMethod) {
+        throw new Error(t('No online payment method is available'))
+      }
+      const epay = await payStoreOrderEpay(orderNo, effectivePaymentMethod)
+      if (epay.message !== 'success' || !epay.url || !epay.data) {
+        throw new Error(epay.message || t('Payment request failed'))
+      }
+      submitEpayForm(epay.url, epay.data)
+    },
+    onError: (error) => toast.error(error.message),
+  })
+  const cancelOrder = useMutation({
+    mutationFn: cancelStoreOrder,
+    onSuccess: async (response) => {
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ['entitlement-store', 'orders'],
+      })
+      toast.success(t('Order cancelled'))
+    },
   })
 
   return (
@@ -145,7 +190,7 @@ export function EntitlementStore() {
               </div>
             ) : (
               <p className='text-muted-foreground rounded-xl border border-dashed p-6 text-sm'>
-                {t('No available SKU')}
+                {catalogEmptyMessage}
               </p>
             )}
           </section>
@@ -175,7 +220,7 @@ export function EntitlementStore() {
               </div>
             ) : (
               <p className='text-muted-foreground rounded-xl border border-dashed p-6 text-sm'>
-                {t('No available SKU')}
+                {catalogEmptyMessage}
               </p>
             )}
           </section>
@@ -190,6 +235,7 @@ export function EntitlementStore() {
                     <th className='p-3'>{t('Amount')}</th>
                     <th className='p-3'>{t('Status')}</th>
                     <th className='p-3'>{t('Created at')}</th>
+                    <th className='p-3'>{t('Actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -212,6 +258,35 @@ export function EntitlementStore() {
                         <Badge variant='secondary'>{t(order.status)}</Badge>
                       </td>
                       <td className='p-3'>{formatDate(order.created_at)}</td>
+                      <td className='p-3'>
+                        {order.status === 'pending' ? (
+                          <div className='flex gap-2'>
+                            <Button
+                              size='sm'
+                              disabled={resumePayment.isPending}
+                              onClick={() =>
+                                resumePayment.mutate(order.order_no)
+                              }
+                            >
+                              {t('Pay now')}
+                            </Button>
+                            {!order.payment_provider ? (
+                              <Button
+                                size='sm'
+                                variant='outline'
+                                disabled={cancelOrder.isPending}
+                                onClick={() =>
+                                  cancelOrder.mutate(order.order_no)
+                                }
+                              >
+                                {t('Cancel')}
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

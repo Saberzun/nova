@@ -43,12 +43,14 @@ const (
 	ProductOrderStatusFulfilled = "fulfilled"
 	ProductOrderStatusCancelled = "cancelled"
 	ProductOrderStatusRefunded  = "refunded"
+	ProductOrderPaymentTimeout  = int64(30 * 60)
 )
 
 var (
 	ErrEntitlementQuotaInsufficient = errors.New("entitlement quota insufficient")
 	ErrEntitlementFundingMismatch   = errors.New("entitlement funding source mismatch")
 	ErrEntitlementChargeRefunded    = errors.New("entitlement charge already refunded")
+	ErrProductOrderExpired          = errors.New("product order expired")
 )
 
 type AccessGroupPolicy struct {
@@ -181,6 +183,7 @@ type ProductSKU struct {
 	ActivationPolicy       string `json:"activation_policy" gorm:"type:varchar(32);not null"`
 	ActivationDeadlineSec  int64  `json:"activation_deadline_seconds" gorm:"bigint;not null"`
 	Stock                  int64  `json:"stock" gorm:"bigint;not null"`
+	StockLimited           bool   `json:"stock_limited"`
 	PurchaseLimit          int    `json:"purchase_limit" gorm:"not null"`
 	MultiQuantityEnabled   bool   `json:"multi_quantity_enabled"`
 	Status                 string `json:"status" gorm:"type:varchar(32);index;not null"`
@@ -200,6 +203,9 @@ func (s *ProductSKU) BeforeCreate(_ *gorm.DB) error {
 	}
 	if s.Status == "" {
 		s.Status = ProductStatusDraft
+	}
+	if s.Stock > 0 {
+		s.StockLimited = true
 	}
 	s.CreatedAt, s.UpdatedAt = now, now
 	return nil
@@ -227,9 +233,15 @@ type ProductOrder struct {
 	ProviderPayload  string             `json:"-" gorm:"type:text"`
 	TotalAmountMinor int64              `json:"total_amount_minor" gorm:"bigint;not null"`
 	Currency         string             `json:"currency" gorm:"type:varchar(8);not null"`
+	ExpiresAt        int64              `json:"expires_at" gorm:"bigint;index"`
 	CreatedAt        int64              `json:"created_at" gorm:"bigint"`
 	PaidAt           int64              `json:"paid_at" gorm:"bigint"`
 	FulfilledAt      int64              `json:"fulfilled_at" gorm:"bigint"`
+	CancelledAt      int64              `json:"cancelled_at" gorm:"bigint"`
+	RefundedAt       int64              `json:"refunded_at" gorm:"bigint"`
+	RefundOperatorId int                `json:"refund_operator_id" gorm:"index"`
+	StatusReason     string             `json:"status_reason" gorm:"type:varchar(255)"`
+	StockRestored    bool               `json:"stock_restored"`
 	UpdatedAt        int64              `json:"updated_at" gorm:"bigint"`
 	Items            []ProductOrderItem `json:"items,omitempty" gorm:"foreignKey:OrderId"`
 }
@@ -241,6 +253,9 @@ func (o *ProductOrder) BeforeCreate(_ *gorm.DB) error {
 	}
 	if o.Currency == "" {
 		o.Currency = "CNY"
+	}
+	if o.ExpiresAt == 0 && o.Status == ProductOrderStatusPending {
+		o.ExpiresAt = now + ProductOrderPaymentTimeout
 	}
 	o.CreatedAt, o.UpdatedAt = now, now
 	return nil
@@ -266,6 +281,7 @@ type ProductOrderItem struct {
 	ValiditySeconds       int64  `json:"validity_seconds" gorm:"bigint;not null"`
 	ActivationPolicy      string `json:"activation_policy" gorm:"type:varchar(32);not null"`
 	ActivationDeadlineSec int64  `json:"activation_deadline_seconds" gorm:"bigint;not null"`
+	StockReserved         bool   `json:"stock_reserved"`
 	CreatedAt             int64  `json:"created_at" gorm:"bigint"`
 }
 

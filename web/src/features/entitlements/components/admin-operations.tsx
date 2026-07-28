@@ -24,11 +24,15 @@ import { formatQuota } from '@/lib/format'
 
 import {
   adjustEntitlement,
+  cancelProductOrder,
   completeProductOrder,
   getAdminOrders,
+  getEntitlementAdjustments,
   getEntitlementTypes,
   getUserEntitlements,
   grantEntitlement,
+  refundProductOrder,
+  resetProductOrderPayment,
   revokeEntitlement,
 } from '../api'
 import { formatDate } from '../lib'
@@ -57,18 +61,46 @@ export function AdminOperations() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [lookupUserId, setLookupUserId] = useState(0)
+  const [orderPage, setOrderPage] = useState(1)
+  const [orderStatus, setOrderStatus] = useState('')
+  const [orderKeyword, setOrderKeyword] = useState('')
+  const [orderUserId, setOrderUserId] = useState(0)
+  const [adjustmentEntitlementId, setAdjustmentEntitlementId] = useState(0)
   const types = useQuery({
     queryKey: ['entitlement-admin', 'types'],
     queryFn: getEntitlementTypes,
   })
   const orders = useQuery({
-    queryKey: ['entitlement-admin', 'orders'],
-    queryFn: getAdminOrders,
+    queryKey: [
+      'entitlement-admin',
+      'orders',
+      orderPage,
+      orderStatus,
+      orderKeyword,
+      orderUserId,
+    ],
+    queryFn: () =>
+      getAdminOrders({
+        page: orderPage,
+        page_size: 20,
+        status: orderStatus || undefined,
+        keyword: orderKeyword || undefined,
+        user_id: orderUserId || undefined,
+      }),
   })
   const userEntitlements = useQuery({
     queryKey: ['entitlement-admin', 'user-entitlements', lookupUserId],
     queryFn: () => getUserEntitlements(lookupUserId),
     enabled: lookupUserId > 0,
+  })
+  const adjustments = useQuery({
+    queryKey: [
+      'entitlement-admin',
+      'entitlement-adjustments',
+      adjustmentEntitlementId,
+    ],
+    queryFn: () => getEntitlementAdjustments(adjustmentEntitlementId),
+    enabled: adjustmentEntitlementId > 0,
   })
   const grantForm = useForm<GrantForm>({
     resolver: zodResolver(grantSchema),
@@ -105,7 +137,10 @@ export function AdminOperations() {
       })
     },
     onSuccess: async (response, values) => {
-      if (!response.success) return
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
       setLookupUserId(values.user_id)
       await invalidate()
       toast.success(t('Entitlement granted'))
@@ -119,7 +154,10 @@ export function AdminOperations() {
         idempotency_key: `admin-${values.entitlement_id}-${Date.now()}`,
       }),
     onSuccess: async (response) => {
-      if (!response.success) return
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
       await invalidate()
       toast.success(t('Entitlement adjusted'))
     },
@@ -127,7 +165,10 @@ export function AdminOperations() {
   const revoke = useMutation({
     mutationFn: revokeEntitlement,
     onSuccess: async (response) => {
-      if (!response.success) return
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
       await invalidate()
       toast.success(t('Entitlement revoked'))
     },
@@ -135,9 +176,48 @@ export function AdminOperations() {
   const complete = useMutation({
     mutationFn: completeProductOrder,
     onSuccess: async (response) => {
-      if (!response.success) return
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
       await invalidate()
       toast.success(t('Order fulfilled'))
+    },
+  })
+  const cancelOrder = useMutation({
+    mutationFn: (input: { orderNo: string; reason: string }) =>
+      cancelProductOrder(input.orderNo, input.reason),
+    onSuccess: async (response) => {
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
+      await invalidate()
+      toast.success(t('Order cancelled'))
+    },
+  })
+  const refundOrder = useMutation({
+    mutationFn: (input: { orderNo: string; reason: string }) =>
+      refundProductOrder(input.orderNo, input.reason),
+    onSuccess: async (response) => {
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
+      await invalidate()
+      toast.success(t('Order marked as refunded'))
+    },
+  })
+  const resetPayment = useMutation({
+    mutationFn: (input: { orderNo: string; reason: string }) =>
+      resetProductOrderPayment(input.orderNo, input.reason),
+    onSuccess: async (response) => {
+      if (!response.success) {
+        toast.error(response.message || t('Operation failed'))
+        return
+      }
+      await invalidate()
+      toast.success(t('Payment state reset'))
     },
   })
 
@@ -272,6 +352,13 @@ export function AdminOperations() {
                   <Badge variant='secondary'>{t(entitlement.state)}</Badge>
                   <Button
                     size='sm'
+                    variant='outline'
+                    onClick={() => setAdjustmentEntitlementId(entitlement.id)}
+                  >
+                    {t('Adjustment history')}
+                  </Button>
+                  <Button
+                    size='sm'
                     variant='destructive'
                     disabled={revoke.isPending}
                     onClick={() => {
@@ -289,9 +376,86 @@ export function AdminOperations() {
         </CardContent>
       </Card>
 
+      {adjustmentEntitlementId > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {t('Adjustment history for entitlement #{{id}}', {
+                id: adjustmentEntitlementId,
+              })}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-2'>
+            {(adjustments.data?.data ?? []).map((adjustment) => (
+              <div
+                key={adjustment.id}
+                className='rounded-lg border p-3 text-sm'
+              >
+                <div className='flex justify-between gap-2'>
+                  <strong>{formatQuota(adjustment.delta_quota)}</strong>
+                  <span className='text-muted-foreground'>
+                    {formatDate(adjustment.created_at)}
+                  </span>
+                </div>
+                <p className='text-muted-foreground'>{adjustment.reason}</p>
+              </div>
+            ))}
+            {!adjustments.isPending &&
+            (adjustments.data?.data?.length ?? 0) === 0 ? (
+              <p className='text-muted-foreground text-sm'>
+                {t('No adjustment history')}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
-          <CardTitle>{t('Product orders')}</CardTitle>
+          <div className='space-y-3'>
+            <CardTitle>{t('Product orders')}</CardTitle>
+            <div className='grid gap-2 md:grid-cols-4'>
+              <Input
+                placeholder={t('Order number')}
+                value={orderKeyword}
+                onChange={(event) => {
+                  setOrderKeyword(event.target.value)
+                  setOrderPage(1)
+                }}
+              />
+              <Input
+                type='number'
+                placeholder={t('User ID')}
+                onChange={(event) => {
+                  setOrderUserId(Number(event.target.value) || 0)
+                  setOrderPage(1)
+                }}
+              />
+              <NativeSelect
+                value={orderStatus}
+                onChange={(event) => {
+                  setOrderStatus(event.target.value)
+                  setOrderPage(1)
+                }}
+              >
+                <NativeSelectOption value=''>
+                  {t('All statuses')}
+                </NativeSelectOption>
+                <NativeSelectOption value='pending'>
+                  {t('pending')}
+                </NativeSelectOption>
+                <NativeSelectOption value='fulfilled'>
+                  {t('fulfilled')}
+                </NativeSelectOption>
+                <NativeSelectOption value='cancelled'>
+                  {t('cancelled')}
+                </NativeSelectOption>
+                <NativeSelectOption value='refunded'>
+                  {t('refunded')}
+                </NativeSelectOption>
+              </NativeSelect>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className='space-y-2'>
           {(orders.data?.data?.items ?? []).map((order) => (
@@ -304,21 +468,127 @@ export function AdminOperations() {
                 <p className='text-muted-foreground text-xs'>
                   {t('User')} #{order.user_id} · {formatDate(order.created_at)}
                 </p>
+                <p className='text-muted-foreground text-xs'>
+                  {order.items?.map((item) => item.sku_name).join(', ') || '—'}{' '}
+                  ·{' '}
+                  {new Intl.NumberFormat(undefined, {
+                    style: 'currency',
+                    currency: order.currency || 'CNY',
+                  }).format(order.total_amount_minor / 100)}
+                </p>
+                {order.payment_provider ? (
+                  <p className='text-muted-foreground text-xs'>
+                    {order.payment_provider} · {order.payment_method}
+                  </p>
+                ) : null}
+                {order.status_reason ? (
+                  <p className='text-muted-foreground text-xs'>
+                    {t('Reason')}: {order.status_reason}
+                  </p>
+                ) : null}
               </div>
-              <div className='flex items-center gap-2'>
+              <div className='flex flex-wrap items-center gap-2'>
                 <Badge variant='secondary'>{t(order.status)}</Badge>
                 {order.status === 'pending' ? (
                   <Button
                     size='sm'
                     disabled={complete.isPending}
-                    onClick={() => complete.mutate(order.order_no)}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          t(
+                            'Confirm payment was received before manual fulfillment?'
+                          )
+                        )
+                      ) {
+                        complete.mutate(order.order_no)
+                      }
+                    }}
                   >
                     {t('Manual fulfill')}
+                  </Button>
+                ) : null}
+                {order.status === 'pending' && !order.payment_provider ? (
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={cancelOrder.isPending}
+                    onClick={() => {
+                      const reason = window
+                        .prompt(t('Cancellation reason'))
+                        ?.trim()
+                      if (reason) {
+                        cancelOrder.mutate({ orderNo: order.order_no, reason })
+                      }
+                    }}
+                  >
+                    {t('Cancel order')}
+                  </Button>
+                ) : null}
+                {order.status === 'pending' && order.payment_provider ? (
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    disabled={resetPayment.isPending}
+                    onClick={() => {
+                      const reason = window
+                        .prompt(
+                          t(
+                            'Confirm the payment is unpaid, then enter the reset reason'
+                          )
+                        )
+                        ?.trim()
+                      if (reason) {
+                        resetPayment.mutate({ orderNo: order.order_no, reason })
+                      }
+                    }}
+                  >
+                    {t('Reset payment')}
+                  </Button>
+                ) : null}
+                {order.status === 'fulfilled' ? (
+                  <Button
+                    size='sm'
+                    variant='destructive'
+                    disabled={refundOrder.isPending}
+                    onClick={() => {
+                      const reason = window
+                        .prompt(
+                          t(
+                            'Confirm the external refund first, then enter the refund reason'
+                          )
+                        )
+                        ?.trim()
+                      if (reason) {
+                        refundOrder.mutate({ orderNo: order.order_no, reason })
+                      }
+                    }}
+                  >
+                    {t('Mark refunded')}
                   </Button>
                 ) : null}
               </div>
             </div>
           ))}
+          <div className='flex items-center justify-between pt-3'>
+            <Button
+              variant='outline'
+              disabled={orderPage <= 1}
+              onClick={() => setOrderPage((page) => Math.max(1, page - 1))}
+            >
+              {t('Previous')}
+            </Button>
+            <span className='text-muted-foreground text-sm'>
+              {t('Page {{page}}', { page: orderPage })}
+            </span>
+            <Button
+              variant='outline'
+              disabled={orderPage * 20 >= (orders.data?.data?.total ?? 0)}
+              onClick={() => setOrderPage((page) => page + 1)}
+            >
+              {t('Next')}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
