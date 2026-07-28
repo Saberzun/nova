@@ -68,6 +68,11 @@ type SKUForm = z.infer<typeof skuSchema>
 
 export function AdminProducts() {
   const { t } = useTranslation()
+  const activationPolicyLabels = {
+    immediate: t('Immediate'),
+    manual: t('Manual activation'),
+    deferred: t('Deferred'),
+  }
   const queryClient = useQueryClient()
   const [editingProductId, setEditingProductId] = useState<number | null>(null)
   const [editingSKUId, setEditingSKUId] = useState<number | null>(null)
@@ -496,7 +501,13 @@ export function AdminProducts() {
                 <div>
                   <CardTitle>{product.name}</CardTitle>
                   <div className='mt-2 flex gap-2'>
-                    <Badge variant='secondary'>{t(product.category)}</Badge>
+                    <Badge variant='secondary'>
+                      {t(
+                        product.category === 'subscription'
+                          ? 'Subscription'
+                          : 'Recharge'
+                      )}
+                    </Badge>
                     <Badge variant='outline'>{t(product.status)}</Badge>
                   </div>
                 </div>
@@ -540,7 +551,7 @@ export function AdminProducts() {
                   </div>
                   <p className='text-muted-foreground'>
                     {formatQuota(sku.grant_total_quota)} ·{' '}
-                    {sku.activation_policy}
+                    {activationPolicyLabels[sku.activation_policy]}
                   </p>
                   {product.category === 'recharge' ? (
                     <p className='text-muted-foreground'>
