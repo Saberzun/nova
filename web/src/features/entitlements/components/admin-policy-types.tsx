@@ -30,6 +30,7 @@ import {
   saveGroupPolicy,
   updateEntitlementType,
 } from '../api'
+import { AdminFormField } from './admin-form-field'
 
 const policySchema = z.object({
   group_name: z.string().trim().min(1),
@@ -103,11 +104,15 @@ export function AdminPolicyTypes() {
   const savePolicy = useMutation({
     mutationFn: saveGroupPolicy,
     onSuccess: async (response) => {
-      if (!response.success) throw new Error(response.message)
+      if (!response.success) {
+        toast.error(response.message || t('Save failed'))
+        return
+      }
       await invalidate()
       policyForm.reset()
       toast.success(t('Group policy saved'))
     },
+    onError: () => toast.error(t('Save failed')),
   })
   const saveType = useMutation({
     mutationFn: (input: { id: number | null; values: TypeForm }) => {
@@ -117,12 +122,16 @@ export function AdminPolicyTypes() {
         : createEntitlementType(payload)
     },
     onSuccess: async (response) => {
-      if (!response.success) throw new Error(response.message)
+      if (!response.success) {
+        toast.error(response.message || t('Save failed'))
+        return
+      }
       await invalidate()
       typeForm.reset()
       setEditingTypeId(null)
       toast.success(t('Entitlement type saved'))
     },
+    onError: () => toast.error(t('Save failed')),
   })
   const saveGroups = useMutation({
     mutationFn: (values: GroupsForm) =>
@@ -135,10 +144,14 @@ export function AdminPolicyTypes() {
         values.reason
       ),
     onSuccess: async (response) => {
-      if (!response.success) throw new Error(response.message)
+      if (!response.success) {
+        toast.error(response.message || t('Save failed'))
+        return
+      }
       await invalidate()
       toast.success(t('Allowed groups updated'))
     },
+    onError: () => toast.error(t('Save failed')),
   })
 
   return (
@@ -154,24 +167,25 @@ export function AdminPolicyTypes() {
               savePolicy.mutate(values)
             )}
           >
-            <Input
-              placeholder={t('Group name')}
-              {...policyForm.register('group_name')}
-            />
-            <NativeSelect
-              className='w-full'
-              {...policyForm.register('funding_source_type')}
-            >
-              <NativeSelectOption value='subscription'>
-                {t('Subscription quota')}
-              </NativeSelectOption>
-              <NativeSelectOption value='stored_value'>
-                {t('Recharge quota')}
-              </NativeSelectOption>
-              <NativeSelectOption value='system_wallet'>
-                {t('System wallet')}
-              </NativeSelectOption>
-            </NativeSelect>
+            <AdminFormField label={t('Group name')}>
+              <Input {...policyForm.register('group_name')} />
+            </AdminFormField>
+            <AdminFormField label={t('Funding source')}>
+              <NativeSelect
+                className='w-full'
+                {...policyForm.register('funding_source_type')}
+              >
+                <NativeSelectOption value='subscription'>
+                  {t('Subscription quota')}
+                </NativeSelectOption>
+                <NativeSelectOption value='stored_value'>
+                  {t('Recharge quota')}
+                </NativeSelectOption>
+                <NativeSelectOption value='system_wallet'>
+                  {t('System wallet')}
+                </NativeSelectOption>
+              </NativeSelect>
+            </AdminFormField>
             <Button type='submit' disabled={savePolicy.isPending}>
               {t('Save')}
             </Button>
@@ -207,40 +221,41 @@ export function AdminPolicyTypes() {
               saveType.mutate({ id: editingTypeId, values })
             )}
           >
-            <Input
-              placeholder={t('Type code')}
-              {...typeForm.register('code')}
-            />
-            <Input
-              placeholder={t('Type name')}
-              {...typeForm.register('name')}
-            />
-            <Input
-              placeholder={t('Description')}
-              {...typeForm.register('description')}
-            />
-            <NativeSelect
-              className='w-full'
-              {...typeForm.register('asset_kind')}
-            >
-              <NativeSelectOption value='subscription'>
-                {t('Subscription quota')}
-              </NativeSelectOption>
-              <NativeSelectOption value='stored_value'>
-                {t('Recharge quota')}
-              </NativeSelectOption>
-            </NativeSelect>
-            <NativeSelect className='w-full' {...typeForm.register('status')}>
-              <NativeSelectOption value='active'>
-                {t('active')}
-              </NativeSelectOption>
-              <NativeSelectOption value='disabled'>
-                {t('disabled')}
-              </NativeSelectOption>
-              <NativeSelectOption value='archived'>
-                {t('archived')}
-              </NativeSelectOption>
-            </NativeSelect>
+            <AdminFormField label={t('Type code')}>
+              <Input {...typeForm.register('code')} />
+            </AdminFormField>
+            <AdminFormField label={t('Type name')}>
+              <Input {...typeForm.register('name')} />
+            </AdminFormField>
+            <AdminFormField label={t('Description')}>
+              <Input {...typeForm.register('description')} />
+            </AdminFormField>
+            <AdminFormField label={t('Funding source')}>
+              <NativeSelect
+                className='w-full'
+                {...typeForm.register('asset_kind')}
+              >
+                <NativeSelectOption value='subscription'>
+                  {t('Subscription quota')}
+                </NativeSelectOption>
+                <NativeSelectOption value='stored_value'>
+                  {t('Recharge quota')}
+                </NativeSelectOption>
+              </NativeSelect>
+            </AdminFormField>
+            <AdminFormField label={t('Status')}>
+              <NativeSelect className='w-full' {...typeForm.register('status')}>
+                <NativeSelectOption value='active'>
+                  {t('active')}
+                </NativeSelectOption>
+                <NativeSelectOption value='disabled'>
+                  {t('disabled')}
+                </NativeSelectOption>
+                <NativeSelectOption value='archived'>
+                  {t('archived')}
+                </NativeSelectOption>
+              </NativeSelect>
+            </AdminFormField>
             <div className='flex gap-2'>
               <Button type='submit' disabled={saveType.isPending}>
                 {editingTypeId ? t('Save') : t('Create')}
@@ -273,27 +288,27 @@ export function AdminPolicyTypes() {
               saveGroups.mutate(values)
             )}
           >
-            <NativeSelect
-              className='w-full'
-              {...groupsForm.register('type_id', { valueAsNumber: true })}
-            >
-              <NativeSelectOption value={0}>
-                {t('Select type')}
-              </NativeSelectOption>
-              {(types.data?.data ?? []).map((type) => (
-                <NativeSelectOption key={type.id} value={type.id}>
-                  {type.name} ({type.asset_kind})
+            <AdminFormField label={t('Entitlement type')}>
+              <NativeSelect
+                className='w-full'
+                {...groupsForm.register('type_id', { valueAsNumber: true })}
+              >
+                <NativeSelectOption value={0}>
+                  {t('Select type')}
                 </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <Input
-              placeholder={t('Comma-separated group names')}
-              {...groupsForm.register('groups')}
-            />
-            <Input
-              placeholder={t('Change reason')}
-              {...groupsForm.register('reason')}
-            />
+                {(types.data?.data ?? []).map((type) => (
+                  <NativeSelectOption key={type.id} value={type.id}>
+                    {type.name} ({type.asset_kind})
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </AdminFormField>
+            <AdminFormField label={t('Comma-separated group names')}>
+              <Input {...groupsForm.register('groups')} />
+            </AdminFormField>
+            <AdminFormField label={t('Change reason')}>
+              <Input {...groupsForm.register('reason')} />
+            </AdminFormField>
             <Button type='submit' disabled={saveGroups.isPending}>
               {t('Replace allowed groups')}
             </Button>

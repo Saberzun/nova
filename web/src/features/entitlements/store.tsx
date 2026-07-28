@@ -255,7 +255,13 @@ export function EntitlementStore(props: EntitlementStoreProps) {
                         }).format(order.total_amount_minor / 100)}
                       </td>
                       <td className='p-3'>
-                        <Badge variant='secondary'>{t(order.status)}</Badge>
+                        <Badge variant='secondary'>
+                          {t(
+                            order.status === 'pending'
+                              ? 'Pending payment'
+                              : order.status
+                          )}
+                        </Badge>
                       </td>
                       <td className='p-3'>{formatDate(order.created_at)}</td>
                       <td className='p-3'>

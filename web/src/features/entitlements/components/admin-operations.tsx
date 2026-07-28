@@ -36,6 +36,7 @@ import {
   revokeEntitlement,
 } from '../api'
 import { formatDate } from '../lib'
+import { AdminFormField } from './admin-form-field'
 
 const grantSchema = z.object({
   user_id: z.number().int().positive(),
@@ -59,6 +60,8 @@ type AdjustmentForm = z.infer<typeof adjustmentSchema>
 
 export function AdminOperations() {
   const { t } = useTranslation()
+  const orderStatusLabel = (status: string) =>
+    t(status === 'pending' ? 'Pending payment' : status)
   const queryClient = useQueryClient()
   const [lookupUserId, setLookupUserId] = useState(0)
   const [orderPage, setOrderPage] = useState(1)
@@ -235,44 +238,58 @@ export function AdminOperations() {
                 grant.mutate(values)
               )}
             >
-              <Input
-                type='number'
-                placeholder={t('User ID')}
-                {...grantForm.register('user_id', { valueAsNumber: true })}
-              />
-              <NativeSelect
-                className='w-full'
-                {...grantForm.register('entitlement_type_id', {
-                  valueAsNumber: true,
-                })}
-              >
-                <NativeSelectOption value={0}>
-                  {t('Select type')}
-                </NativeSelectOption>
-                {(types.data?.data ?? []).map((type) => (
-                  <NativeSelectOption key={type.id} value={type.id}>
-                    {type.name}
+              <AdminFormField label={t('User ID')}>
+                <Input
+                  type='number'
+                  {...grantForm.register('user_id', { valueAsNumber: true })}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Entitlement type')}>
+                <NativeSelect
+                  className='w-full'
+                  {...grantForm.register('entitlement_type_id', {
+                    valueAsNumber: true,
+                  })}
+                >
+                  <NativeSelectOption value={0}>
+                    {t('Select type')}
                   </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <Input
-                type='number'
-                placeholder={t('Total quota')}
-                {...grantForm.register('total_quota', { valueAsNumber: true })}
-              />
-              <Input
-                type='number'
-                placeholder={t('Daily quota')}
-                {...grantForm.register('daily_quota', { valueAsNumber: true })}
-              />
-              <Input
-                type='number'
-                placeholder={t('Validity days, 0 means no expiry')}
-                {...grantForm.register('validity_days', {
-                  valueAsNumber: true,
-                })}
-              />
-              <Button type='submit' disabled={grant.isPending}>
+                  {(types.data?.data ?? []).map((type) => (
+                    <NativeSelectOption key={type.id} value={type.id}>
+                      {type.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </AdminFormField>
+              <AdminFormField label={t('Total quota')}>
+                <Input
+                  type='number'
+                  {...grantForm.register('total_quota', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Daily quota')}>
+                <Input
+                  type='number'
+                  {...grantForm.register('daily_quota', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Validity days, 0 means no expiry')}>
+                <Input
+                  type='number'
+                  {...grantForm.register('validity_days', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <Button
+                className='self-end'
+                type='submit'
+                disabled={grant.isPending}
+              >
                 {t('Grant')}
               </Button>
             </form>
@@ -290,25 +307,28 @@ export function AdminOperations() {
                 adjust.mutate(values)
               )}
             >
-              <Input
-                type='number'
-                placeholder={t('Entitlement ID')}
-                {...adjustmentForm.register('entitlement_id', {
-                  valueAsNumber: true,
-                })}
-              />
-              <Input
-                type='number'
-                placeholder={t('Quota delta')}
-                {...adjustmentForm.register('delta_quota', {
-                  valueAsNumber: true,
-                })}
-              />
-              <Input
+              <AdminFormField label={t('Entitlement ID')}>
+                <Input
+                  type='number'
+                  {...adjustmentForm.register('entitlement_id', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Quota delta')}>
+                <Input
+                  type='number'
+                  {...adjustmentForm.register('delta_quota', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <AdminFormField
                 className='sm:col-span-2'
-                placeholder={t('Adjustment reason')}
-                {...adjustmentForm.register('reason')}
-              />
+                label={t('Adjustment reason')}
+              >
+                <Input {...adjustmentForm.register('reason')} />
+              </AdminFormField>
               <Button type='submit' disabled={adjust.isPending}>
                 {t('Adjust')}
               </Button>
@@ -321,16 +341,15 @@ export function AdminOperations() {
         <CardHeader>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <CardTitle>{t('User entitlements')}</CardTitle>
-            <div className='flex gap-2'>
+            <AdminFormField label={t('User ID')}>
               <Input
                 className='w-36'
                 type='number'
-                placeholder={t('User ID')}
                 onChange={(event) =>
                   setLookupUserId(Number(event.target.value) || 0)
                 }
               />
-            </div>
+            </AdminFormField>
           </div>
         </CardHeader>
         <CardContent className='space-y-2'>
@@ -415,45 +434,50 @@ export function AdminOperations() {
           <div className='space-y-3'>
             <CardTitle>{t('Product orders')}</CardTitle>
             <div className='grid gap-2 md:grid-cols-4'>
-              <Input
-                placeholder={t('Order number')}
-                value={orderKeyword}
-                onChange={(event) => {
-                  setOrderKeyword(event.target.value)
-                  setOrderPage(1)
-                }}
-              />
-              <Input
-                type='number'
-                placeholder={t('User ID')}
-                onChange={(event) => {
-                  setOrderUserId(Number(event.target.value) || 0)
-                  setOrderPage(1)
-                }}
-              />
-              <NativeSelect
-                value={orderStatus}
-                onChange={(event) => {
-                  setOrderStatus(event.target.value)
-                  setOrderPage(1)
-                }}
-              >
-                <NativeSelectOption value=''>
-                  {t('All statuses')}
-                </NativeSelectOption>
-                <NativeSelectOption value='pending'>
-                  {t('pending')}
-                </NativeSelectOption>
-                <NativeSelectOption value='fulfilled'>
-                  {t('fulfilled')}
-                </NativeSelectOption>
-                <NativeSelectOption value='cancelled'>
-                  {t('cancelled')}
-                </NativeSelectOption>
-                <NativeSelectOption value='refunded'>
-                  {t('refunded')}
-                </NativeSelectOption>
-              </NativeSelect>
+              <AdminFormField label={t('Order number')}>
+                <Input
+                  value={orderKeyword}
+                  onChange={(event) => {
+                    setOrderKeyword(event.target.value)
+                    setOrderPage(1)
+                  }}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('User ID')}>
+                <Input
+                  type='number'
+                  onChange={(event) => {
+                    setOrderUserId(Number(event.target.value) || 0)
+                    setOrderPage(1)
+                  }}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Status')}>
+                <NativeSelect
+                  className='w-full'
+                  value={orderStatus}
+                  onChange={(event) => {
+                    setOrderStatus(event.target.value)
+                    setOrderPage(1)
+                  }}
+                >
+                  <NativeSelectOption value=''>
+                    {t('All statuses')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='pending'>
+                    {t('Pending payment')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='fulfilled'>
+                    {t('fulfilled')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='cancelled'>
+                    {t('cancelled')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='refunded'>
+                    {t('refunded')}
+                  </NativeSelectOption>
+                </NativeSelect>
+              </AdminFormField>
             </div>
           </div>
         </CardHeader>
@@ -488,7 +512,9 @@ export function AdminOperations() {
                 ) : null}
               </div>
               <div className='flex flex-wrap items-center gap-2'>
-                <Badge variant='secondary'>{t(order.status)}</Badge>
+                <Badge variant='secondary'>
+                  {orderStatusLabel(order.status)}
+                </Badge>
                 {order.status === 'pending' ? (
                   <Button
                     size='sm'

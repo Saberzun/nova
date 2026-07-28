@@ -31,6 +31,7 @@ import {
   updateProduct,
   updateProductSKU,
 } from '../api'
+import { AdminFormField } from './admin-form-field'
 
 const productSchema = z.object({
   code: z.string().trim().min(1),
@@ -181,53 +182,59 @@ export function AdminProducts() {
                 saveProduct.mutate({ id: editingProductId, values })
               )}
             >
-              <Input
-                placeholder={t('Product code')}
-                {...productForm.register('code')}
-              />
-              <Input
-                placeholder={t('Product name')}
-                {...productForm.register('name')}
-              />
-              <Input
+              <AdminFormField label={t('Product code')}>
+                <Input {...productForm.register('code')} />
+              </AdminFormField>
+              <AdminFormField label={t('Product name')}>
+                <Input {...productForm.register('name')} />
+              </AdminFormField>
+              <AdminFormField
                 className='sm:col-span-2'
-                placeholder={t('Description')}
-                {...productForm.register('description')}
-              />
-              <NativeSelect
-                className='w-full'
-                {...productForm.register('category')}
+                label={t('Description')}
               >
-                <NativeSelectOption value='subscription'>
-                  {t('Subscription')}
-                </NativeSelectOption>
-                <NativeSelectOption value='recharge'>
-                  {t('Recharge')}
-                </NativeSelectOption>
-              </NativeSelect>
-              <NativeSelect
-                className='w-full'
-                {...productForm.register('status')}
-              >
-                <NativeSelectOption value='draft'>
-                  {t('draft')}
-                </NativeSelectOption>
-                <NativeSelectOption value='active'>
-                  {t('active')}
-                </NativeSelectOption>
-                <NativeSelectOption value='paused'>
-                  {t('paused')}
-                </NativeSelectOption>
-                <NativeSelectOption value='archived'>
-                  {t('archived')}
-                </NativeSelectOption>
-              </NativeSelect>
-              <Input
-                type='number'
-                placeholder={t('Sort order')}
-                {...productForm.register('sort_order', { valueAsNumber: true })}
-              />
-              <div className='flex gap-2'>
+                <Input {...productForm.register('description')} />
+              </AdminFormField>
+              <AdminFormField label={t('Category')}>
+                <NativeSelect
+                  className='w-full'
+                  {...productForm.register('category')}
+                >
+                  <NativeSelectOption value='subscription'>
+                    {t('Subscription')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='recharge'>
+                    {t('Recharge')}
+                  </NativeSelectOption>
+                </NativeSelect>
+              </AdminFormField>
+              <AdminFormField label={t('Status')}>
+                <NativeSelect
+                  className='w-full'
+                  {...productForm.register('status')}
+                >
+                  <NativeSelectOption value='draft'>
+                    {t('draft')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='active'>
+                    {t('active')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='paused'>
+                    {t('paused')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='archived'>
+                    {t('archived')}
+                  </NativeSelectOption>
+                </NativeSelect>
+              </AdminFormField>
+              <AdminFormField label={t('Sort order')}>
+                <Input
+                  type='number'
+                  {...productForm.register('sort_order', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <div className='flex items-end gap-2'>
                 <Button type='submit' disabled={saveProduct.isPending}>
                   {editingProductId ? t('Save') : t('Create')}
                 </Button>
@@ -261,60 +268,66 @@ export function AdminProducts() {
                 saveSKU.mutate({ id: editingSKUId, values })
               )}
             >
-              <NativeSelect
-                className='w-full'
-                {...skuForm.register('product_id', { valueAsNumber: true })}
-              >
-                <NativeSelectOption value={0}>
-                  {t('Select product')}
-                </NativeSelectOption>
-                {(products.data?.data ?? []).map((product) => (
-                  <NativeSelectOption key={product.id} value={product.id}>
-                    {product.name}
+              <AdminFormField label={t('Product')}>
+                <NativeSelect
+                  className='w-full'
+                  {...skuForm.register('product_id', { valueAsNumber: true })}
+                >
+                  <NativeSelectOption value={0}>
+                    {t('Select product')}
                   </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <NativeSelect
-                className='w-full'
-                {...skuForm.register('entitlement_type_id', {
-                  valueAsNumber: true,
-                })}
-              >
-                <NativeSelectOption value={0}>
-                  {t('Select type')}
-                </NativeSelectOption>
-                {(types.data?.data ?? []).map((type) => (
-                  <NativeSelectOption key={type.id} value={type.id}>
-                    {type.name}
+                  {(products.data?.data ?? []).map((product) => (
+                    <NativeSelectOption key={product.id} value={product.id}>
+                      {product.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </AdminFormField>
+              <AdminFormField label={t('Entitlement type')}>
+                <NativeSelect
+                  className='w-full'
+                  {...skuForm.register('entitlement_type_id', {
+                    valueAsNumber: true,
+                  })}
+                >
+                  <NativeSelectOption value={0}>
+                    {t('Select type')}
                   </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <Input
-                placeholder={t('SKU code')}
-                {...skuForm.register('code')}
-              />
-              <Input
-                placeholder={t('SKU name')}
-                {...skuForm.register('name')}
-              />
-              <Input
-                type='number'
-                placeholder={
+                  {(types.data?.data ?? []).map((type) => (
+                    <NativeSelectOption key={type.id} value={type.id}>
+                      {type.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </AdminFormField>
+              <AdminFormField label={t('SKU code')}>
+                <Input {...skuForm.register('code')} />
+              </AdminFormField>
+              <AdminFormField label={t('SKU name')}>
+                <Input {...skuForm.register('name')} />
+              </AdminFormField>
+              <AdminFormField
+                label={
                   isRechargeSKU
                     ? t('Recharge pricing basis in cents')
                     : t('Price in cents')
                 }
-                {...skuForm.register('price_amount_minor', {
-                  valueAsNumber: true,
-                })}
-              />
-              <Input
-                type='number'
-                placeholder={t('Grant total quota')}
-                {...skuForm.register('grant_total_quota', {
-                  valueAsNumber: true,
-                })}
-              />
+              >
+                <Input
+                  type='number'
+                  {...skuForm.register('price_amount_minor', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Grant total quota')}>
+                <Input
+                  type='number'
+                  {...skuForm.register('grant_total_quota', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
               {isRechargeSKU ? (
                 <>
                   <p className='text-muted-foreground text-sm sm:col-span-2'>
@@ -322,20 +335,22 @@ export function AdminProducts() {
                       'Recharge price and quota define the conversion rate. Customers choose the actual amount at checkout.'
                     )}
                   </p>
-                  <Input
-                    type='number'
-                    placeholder={t('Minimum recharge amount in cents')}
-                    {...skuForm.register('min_recharge_amount_minor', {
-                      valueAsNumber: true,
-                    })}
-                  />
-                  <Input
-                    type='number'
-                    placeholder={t('Maximum recharge amount in cents')}
-                    {...skuForm.register('max_recharge_amount_minor', {
-                      valueAsNumber: true,
-                    })}
-                  />
+                  <AdminFormField label={t('Minimum recharge amount in cents')}>
+                    <Input
+                      type='number'
+                      {...skuForm.register('min_recharge_amount_minor', {
+                        valueAsNumber: true,
+                      })}
+                    />
+                  </AdminFormField>
+                  <AdminFormField label={t('Maximum recharge amount in cents')}>
+                    <Input
+                      type='number'
+                      {...skuForm.register('max_recharge_amount_minor', {
+                        valueAsNumber: true,
+                      })}
+                    />
+                  </AdminFormField>
                   {rechargeAlreadyHasRule ? (
                     <p className='text-destructive text-sm sm:col-span-2'>
                       {t(
@@ -345,47 +360,53 @@ export function AdminProducts() {
                   ) : null}
                 </>
               ) : null}
-              <Input
-                type='number'
-                placeholder={t('Grant daily quota')}
-                {...skuForm.register('grant_daily_quota', {
-                  valueAsNumber: true,
-                })}
-              />
-              <Input
-                type='number'
-                placeholder={t('Validity seconds')}
-                {...skuForm.register('validity_seconds', {
-                  valueAsNumber: true,
-                })}
-              />
-              <NativeSelect
-                className='w-full'
-                {...skuForm.register('activation_policy')}
-              >
-                <NativeSelectOption value='immediate'>
-                  {t('Immediate')}
-                </NativeSelectOption>
-                <NativeSelectOption value='manual'>
-                  {t('Manual activation')}
-                </NativeSelectOption>
-                <NativeSelectOption value='deferred'>
-                  {t('Deferred')}
-                </NativeSelectOption>
-              </NativeSelect>
-              <Input
-                type='number'
-                placeholder={t('Activation deadline seconds')}
-                {...skuForm.register('activation_deadline_seconds', {
-                  valueAsNumber: true,
-                })}
-              />
-              <Input
-                type='number'
-                placeholder={t('Stock')}
-                disabled={!skuForm.watch('stock_limited')}
-                {...skuForm.register('stock', { valueAsNumber: true })}
-              />
+              <AdminFormField label={t('Grant daily quota')}>
+                <Input
+                  type='number'
+                  {...skuForm.register('grant_daily_quota', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Validity seconds')}>
+                <Input
+                  type='number'
+                  {...skuForm.register('validity_seconds', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Activation policy')}>
+                <NativeSelect
+                  className='w-full'
+                  {...skuForm.register('activation_policy')}
+                >
+                  <NativeSelectOption value='immediate'>
+                    {t('Immediate')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='manual'>
+                    {t('Manual activation')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='deferred'>
+                    {t('Deferred')}
+                  </NativeSelectOption>
+                </NativeSelect>
+              </AdminFormField>
+              <AdminFormField label={t('Activation deadline seconds')}>
+                <Input
+                  type='number'
+                  {...skuForm.register('activation_deadline_seconds', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
+              <AdminFormField label={t('Stock')}>
+                <Input
+                  type='number'
+                  disabled={!skuForm.watch('stock_limited')}
+                  {...skuForm.register('stock', { valueAsNumber: true })}
+                />
+              </AdminFormField>
               <label className='flex items-center gap-2 text-sm'>
                 <Checkbox
                   checked={skuForm.watch('stock_limited')}
@@ -395,11 +416,14 @@ export function AdminProducts() {
                 />
                 {t('Limit stock')}
               </label>
-              <Input
-                type='number'
-                placeholder={t('Purchase limit, 0 means unlimited')}
-                {...skuForm.register('purchase_limit', { valueAsNumber: true })}
-              />
+              <AdminFormField label={t('Purchase limit, 0 means unlimited')}>
+                <Input
+                  type='number'
+                  {...skuForm.register('purchase_limit', {
+                    valueAsNumber: true,
+                  })}
+                />
+              </AdminFormField>
               {!isRechargeSKU ? (
                 <label className='flex items-center gap-2 text-sm'>
                   <Checkbox
@@ -414,25 +438,31 @@ export function AdminProducts() {
                   {t('Allow multiple quantities')}
                 </label>
               ) : null}
-              <NativeSelect className='w-full' {...skuForm.register('status')}>
-                <NativeSelectOption value='draft'>
-                  {t('draft')}
-                </NativeSelectOption>
-                <NativeSelectOption value='active'>
-                  {t('active')}
-                </NativeSelectOption>
-                <NativeSelectOption value='paused'>
-                  {t('paused')}
-                </NativeSelectOption>
-                <NativeSelectOption value='archived'>
-                  {t('archived')}
-                </NativeSelectOption>
-              </NativeSelect>
-              <Input
-                type='number'
-                placeholder={t('Sort order')}
-                {...skuForm.register('sort_order', { valueAsNumber: true })}
-              />
+              <AdminFormField label={t('Status')}>
+                <NativeSelect
+                  className='w-full'
+                  {...skuForm.register('status')}
+                >
+                  <NativeSelectOption value='draft'>
+                    {t('draft')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='active'>
+                    {t('active')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='paused'>
+                    {t('paused')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='archived'>
+                    {t('archived')}
+                  </NativeSelectOption>
+                </NativeSelect>
+              </AdminFormField>
+              <AdminFormField label={t('Sort order')}>
+                <Input
+                  type='number'
+                  {...skuForm.register('sort_order', { valueAsNumber: true })}
+                />
+              </AdminFormField>
               <div className='flex gap-2 sm:col-span-2'>
                 <Button
                   type='submit'
