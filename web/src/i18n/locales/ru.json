@@ -5366,6 +5366,20 @@
     "Select groups": "Выберите группы",
     "{{count}} groups selected": "Выбрано групп: {{count}}",
     "Please select at least one group": "Выберите хотя бы одну группу",
-    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "API-ключ может использовать все выбранные группы. Для каждого запроса используется первая выбранная группа, поддерживающая запрошенную модель."
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "API-ключ может использовать все выбранные группы. Для каждого запроса используется первая выбранная группа, поддерживающая запрошенную модель.",
+    "Group priority": "Приоритет групп",
+    "Group selection": "Выбор групп",
+    "Choose the groups this API key can use and arrange their consumption priority.": "Выберите группы для этого API-ключа и настройте приоритет их использования.",
+    "Adjust groups": "Настроить группы",
+    "No groups selected": "Группы не выбраны",
+    "Select the groups this API key can use. Once a request selects a group, retries stay in that group.": "Выберите группы для этого API-ключа. После выбора группы повторные попытки остаются в ней.",
+    "Available groups": "Доступные группы",
+    "Search groups": "Поиск групп",
+    "Added": "Добавлено",
+    "Selected groups": "Выбранные группы",
+    "Higher groups are consumed first": "Группы выше используются в первую очередь",
+    "Drag to reorder": "Перетащите для изменения порядка",
+    "Add groups from the left": "Добавьте группы слева",
+    "Recharge balance": "Пополненный баланс"
   }
 }

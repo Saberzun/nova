@@ -126,6 +126,7 @@ export function ApiKeysMutateDrawer({
       label: key,
       desc: info.desc || key,
       ratio: info.ratio,
+      fundingType: info.funding_type,
     })
   )
   const backendHasAuto = groups.some((g) => g.value === 'auto')
@@ -313,7 +314,7 @@ export function ApiKeysMutateDrawer({
                 name='group'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Groups')}</FormLabel>
+                    <FormLabel>{t('Group priority')}</FormLabel>
                     <FormControl>
                       <ApiKeyGroupCombobox
                         options={groups}
@@ -322,11 +323,6 @@ export function ApiKeysMutateDrawer({
                         placeholder={t('Select groups')}
                       />
                     </FormControl>
-                    <FormDescription>
-                      {t(
-                        'The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.'
-                      )}
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

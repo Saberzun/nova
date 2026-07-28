@@ -5366,6 +5366,20 @@
     "Select groups": "Chọn nhóm",
     "{{count}} groups selected": "Đã chọn {{count}} nhóm",
     "Please select at least one group": "Vui lòng chọn ít nhất một nhóm",
-    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "Khóa API có thể sử dụng tất cả các nhóm đã chọn. Với mỗi yêu cầu, hệ thống dùng nhóm đầu tiên theo thứ tự lựa chọn có hỗ trợ mô hình được yêu cầu."
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "Khóa API có thể sử dụng tất cả các nhóm đã chọn. Với mỗi yêu cầu, hệ thống dùng nhóm đầu tiên theo thứ tự lựa chọn có hỗ trợ mô hình được yêu cầu.",
+    "Group priority": "Ưu tiên nhóm",
+    "Group selection": "Chọn nhóm",
+    "Choose the groups this API key can use and arrange their consumption priority.": "Chọn các nhóm mà khóa API này có thể sử dụng và sắp xếp ưu tiên tiêu thụ.",
+    "Adjust groups": "Điều chỉnh nhóm",
+    "No groups selected": "Chưa chọn nhóm",
+    "Select the groups this API key can use. Once a request selects a group, retries stay in that group.": "Chọn các nhóm mà khóa API này có thể sử dụng. Khi yêu cầu đã chọn một nhóm, các lần thử lại vẫn ở nhóm đó.",
+    "Available groups": "Nhóm khả dụng",
+    "Search groups": "Tìm kiếm nhóm",
+    "Added": "Đã thêm",
+    "Selected groups": "Nhóm đã chọn",
+    "Higher groups are consumed first": "Nhóm ở trên được ưu tiên sử dụng trước",
+    "Drag to reorder": "Kéo để sắp xếp lại",
+    "Add groups from the left": "Thêm nhóm từ bên trái",
+    "Recharge balance": "Số dư nạp tiền"
   }
 }

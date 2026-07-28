@@ -38,8 +38,8 @@ func GetUserGroups(c *gin.Context) {
 	for _, groupName := range entitlementGroups {
 		entitlementGroupSet[groupName] = struct{}{}
 	}
-	for groupName, _ := range ratio_setting.GetGroupRatioCopy() {
-		_, entitlementManaged, policyErr := model.GetAccessGroupFundingType(groupName)
+	for groupName := range ratio_setting.GetGroupRatioCopy() {
+		fundingType, entitlementManaged, policyErr := model.GetAccessGroupFundingType(groupName)
 		if policyErr != nil {
 			continue
 		}
@@ -48,8 +48,9 @@ func GetUserGroups(c *gin.Context) {
 				continue
 			}
 			usableGroups[groupName] = map[string]interface{}{
-				"ratio": service.GetUserGroupRatio(userGroup, groupName),
-				"desc":  setting.GetUsableGroupDescription(groupName),
+				"ratio":        service.GetUserGroupRatio(userGroup, groupName),
+				"desc":         setting.GetUsableGroupDescription(groupName),
+				"funding_type": fundingType,
 			}
 			continue
 		}

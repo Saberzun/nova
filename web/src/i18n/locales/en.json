@@ -5366,6 +5366,20 @@
     "Select groups": "Select groups",
     "{{count}} groups selected": "{{count}} groups selected",
     "Please select at least one group": "Please select at least one group",
-    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used."
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.",
+    "Group priority": "Group priority",
+    "Group selection": "Group selection",
+    "Choose the groups this API key can use and arrange their consumption priority.": "Choose the groups this API key can use and arrange their consumption priority.",
+    "Adjust groups": "Adjust groups",
+    "No groups selected": "No groups selected",
+    "Select the groups this API key can use. Once a request selects a group, retries stay in that group.": "Select the groups this API key can use. Once a request selects a group, retries stay in that group.",
+    "Available groups": "Available groups",
+    "Search groups": "Search groups",
+    "Added": "Added",
+    "Selected groups": "Selected groups",
+    "Higher groups are consumed first": "Higher groups are consumed first",
+    "Drag to reorder": "Drag to reorder",
+    "Add groups from the left": "Add groups from the left",
+    "Recharge balance": "Recharge balance"
   }
 }

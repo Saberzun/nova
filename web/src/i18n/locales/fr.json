@@ -5366,6 +5366,20 @@
     "Select groups": "Sélectionner des groupes",
     "{{count}} groups selected": "{{count}} groupes sélectionnés",
     "Please select at least one group": "Veuillez sélectionner au moins un groupe",
-    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "La clé API peut utiliser tous les groupes sélectionnés. Pour chaque requête, le premier groupe sélectionné prenant en charge le modèle demandé est utilisé."
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "La clé API peut utiliser tous les groupes sélectionnés. Pour chaque requête, le premier groupe sélectionné prenant en charge le modèle demandé est utilisé.",
+    "Group priority": "Priorité des groupes",
+    "Group selection": "Sélection des groupes",
+    "Choose the groups this API key can use and arrange their consumption priority.": "Choisissez les groupes utilisables par cette clé API et définissez leur priorité de consommation.",
+    "Adjust groups": "Ajuster les groupes",
+    "No groups selected": "Aucun groupe sélectionné",
+    "Select the groups this API key can use. Once a request selects a group, retries stay in that group.": "Sélectionnez les groupes utilisables par cette clé API. Une fois un groupe choisi, les nouvelles tentatives restent dans ce groupe.",
+    "Available groups": "Groupes disponibles",
+    "Search groups": "Rechercher des groupes",
+    "Added": "Ajouté",
+    "Selected groups": "Groupes sélectionnés",
+    "Higher groups are consumed first": "Les groupes placés en haut sont utilisés en priorité",
+    "Drag to reorder": "Faire glisser pour réorganiser",
+    "Add groups from the left": "Ajoutez des groupes depuis la gauche",
+    "Recharge balance": "Solde rechargé"
   }
 }

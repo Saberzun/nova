@@ -5366,6 +5366,20 @@
     "Select groups": "選擇分組",
     "{{count}} groups selected": "已選擇 {{count}} 個分組",
     "Please select at least one group": "請至少選擇一個分組",
-    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "此 API Key 可使用所有已選分組。每次請求會依選擇順序使用第一個支援所請求模型的分組。"
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "此 API Key 可使用所有已選分組。每次請求會依選擇順序使用第一個支援所請求模型的分組。",
+    "Group priority": "分組優先級",
+    "Group selection": "分組選擇",
+    "Choose the groups this API key can use and arrange their consumption priority.": "選擇此 API Key 可以使用的分組，並安排消費優先級。",
+    "Adjust groups": "調整分組",
+    "No groups selected": "尚未選擇分組",
+    "Select the groups this API key can use. Once a request selects a group, retries stay in that group.": "選擇此 API Key 允許使用的分組。請求命中分組後，重試不會切換到其他分組。",
+    "Available groups": "可選分組",
+    "Search groups": "搜尋分組",
+    "Added": "已新增",
+    "Selected groups": "已選分組",
+    "Higher groups are consumed first": "越靠前消費優先級越高",
+    "Drag to reorder": "拖曳調整順序",
+    "Add groups from the left": "從左側新增分組",
+    "Recharge balance": "充值餘額"
   }
 }

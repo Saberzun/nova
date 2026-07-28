@@ -5366,6 +5366,20 @@
     "Select groups": "グループを選択",
     "{{count}} groups selected": "{{count}} 個のグループを選択済み",
     "Please select at least one group": "少なくとも1つのグループを選択してください",
-    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "APIキーは選択したすべてのグループを使用できます。各リクエストでは、選択順で対象モデルをサポートする最初のグループが使用されます。"
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "APIキーは選択したすべてのグループを使用できます。各リクエストでは、選択順で対象モデルをサポートする最初のグループが使用されます。",
+    "Group priority": "グループ優先順位",
+    "Group selection": "グループ選択",
+    "Choose the groups this API key can use and arrange their consumption priority.": "このAPIキーで使用するグループを選択し、消費の優先順位を設定します。",
+    "Adjust groups": "グループを調整",
+    "No groups selected": "グループが選択されていません",
+    "Select the groups this API key can use. Once a request selects a group, retries stay in that group.": "このAPIキーで使用するグループを選択します。リクエストがグループを選択すると、再試行も同じグループで行われます。",
+    "Available groups": "選択可能なグループ",
+    "Search groups": "グループを検索",
+    "Added": "追加済み",
+    "Selected groups": "選択済みグループ",
+    "Higher groups are consumed first": "上にあるグループほど優先されます",
+    "Drag to reorder": "ドラッグして並べ替え",
+    "Add groups from the left": "左側からグループを追加",
+    "Recharge balance": "チャージ残高"
   }
 }
