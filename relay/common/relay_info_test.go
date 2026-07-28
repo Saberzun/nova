@@ -1,9 +1,13 @@
 package common
 
 import (
+	"net/http/httptest"
 	"testing"
 
+	rootcommon "github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,4 +41,18 @@ func TestRelayInfoGetFinalRequestRelayFormatFallsBackToRelayFormat(t *testing.T)
 func TestRelayInfoGetFinalRequestRelayFormatNilReceiver(t *testing.T) {
 	var info *RelayInfo
 	require.Equal(t, types.RelayFormat(""), info.GetFinalRequestRelayFormat())
+}
+
+func TestGenBaseRelayInfoPinsExplicitMultiGroupToSelectedGroup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	rootcommon.SetContextKey(ctx, constant.ContextKeyTokenGroup, "gpt-mix-sub,gpt-pro-paygo")
+	rootcommon.SetContextKey(ctx, constant.ContextKeyAutoGroup, "gpt-pro-paygo")
+	rootcommon.SetContextKey(ctx, constant.ContextKeyUsingGroup, "gpt-pro-paygo")
+
+	info := genBaseRelayInfo(ctx, nil)
+
+	require.Equal(t, "gpt-pro-paygo", info.TokenGroup)
+	require.Equal(t, "gpt-pro-paygo", info.UsingGroup)
 }

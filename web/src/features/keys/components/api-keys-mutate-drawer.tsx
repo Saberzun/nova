@@ -151,17 +151,25 @@ export function ApiKeysMutateDrawer({
     }
   }, [open, isUpdate, currentRow, form, defaultUseAutoGroup, backendHasAuto])
 
-  // Correct group after groups load: if the form value is not in available groups, fall back
+  // Remove groups that are no longer available. Existing keys may outlive a
+  // subscription, so editing them should preserve every still-usable group.
   useEffect(() => {
     if (groups.length === 0) return
-    const currentGroup = form.getValues('group')
-    if (currentGroup && !groups.some((g) => g.value === currentGroup)) {
-      const fallback =
-        groups.find((g) => g.value === 'default')?.value ??
-        groups[0]?.value ??
-        ''
-      form.setValue('group', fallback)
-      if (currentGroup === 'auto') {
+    const currentGroups = form.getValues('group')
+    const availableValues = new Set(groups.map((group) => group.value))
+    const validGroups = currentGroups.filter((group) =>
+      availableValues.has(group)
+    )
+    if (validGroups.length !== currentGroups.length) {
+      const fallback = groups.find((g) => g.value === 'default')?.value
+      let nextGroups = validGroups
+      if (nextGroups.length === 0 && fallback) {
+        nextGroups = [fallback]
+      } else if (nextGroups.length === 0 && groups[0]) {
+        nextGroups = [groups[0].value]
+      }
+      form.setValue('group', nextGroups)
+      if (!validGroups.includes('auto')) {
         form.setValue('cross_group_retry', false)
       }
     }
@@ -247,7 +255,7 @@ export function ApiKeysMutateDrawer({
   const quotaPlaceholder = tokensOnly
     ? t('Enter quota in tokens')
     : t('Enter quota in {{currency}}', { currency: currencyLabel })
-  const selectedGroup = form.watch('group')
+  const selectedGroups = form.watch('group')
   const unlimitedQuota = form.watch('unlimited_quota')
 
   return (
@@ -305,21 +313,26 @@ export function ApiKeysMutateDrawer({
                 name='group'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Group')}</FormLabel>
+                    <FormLabel>{t('Groups')}</FormLabel>
                     <FormControl>
                       <ApiKeyGroupCombobox
                         options={groups}
                         value={field.value}
                         onValueChange={field.onChange}
-                        placeholder={t('Select a group')}
+                        placeholder={t('Select groups')}
                       />
                     </FormControl>
+                    <FormDescription>
+                      {t(
+                        'The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.'
+                      )}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              {selectedGroup === 'auto' && (
+              {selectedGroups.length === 1 && selectedGroups[0] === 'auto' && (
                 <FormField
                   control={form.control}
                   name='cross_group_retry'

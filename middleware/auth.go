@@ -456,8 +456,16 @@ func TokenAuth() func(c *gin.Context) {
 		userCache.WriteContext(c)
 
 		userGroup := userCache.Group
-		tokenGroup := token.Group
-		if tokenGroup != "" {
+		effectiveGroups := make([]string, 0)
+		userUsableGroups := service.GetUserUsableGroups(userGroup)
+		for _, tokenGroup := range common.ParseTokenGroups(token.Group) {
+			if tokenGroup == "auto" {
+				effectiveGroups = append(effectiveGroups, tokenGroup)
+				continue
+			}
+			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
+				continue
+			}
 			_, entitlementManaged, policyErr := model.GetAccessGroupFundingType(tokenGroup)
 			if policyErr != nil {
 				abortWithOpenAiMessage(c, http.StatusInternalServerError, "查询权益分组失败")
@@ -469,29 +477,34 @@ func TokenAuth() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusInternalServerError, "查询权益分组失败")
 					return
 				}
-				if !allowed {
-					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("当前权益无权访问 %s 分组", tokenGroup))
-					return
+				if allowed {
+					effectiveGroups = append(effectiveGroups, tokenGroup)
 				}
-			} else if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
-				abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问 %s 分组", tokenGroup))
-				return
+				continue
 			}
-			// check group in common.GroupRatio
-			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
-				if tokenGroup != "auto" {
-					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用", tokenGroup))
-					return
-				}
+			if _, ok := userUsableGroups[tokenGroup]; ok {
+				effectiveGroups = append(effectiveGroups, tokenGroup)
 			}
-			userGroup = tokenGroup
 		}
-		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
+		if token.Group != "" && len(effectiveGroups) == 0 {
+			abortWithOpenAiMessage(c, http.StatusForbidden, "当前 API Key 已没有可用分组")
+			return
+		}
+		effectiveTokenGroup := strings.Join(effectiveGroups, ",")
+		usingGroup := userGroup
+		if len(effectiveGroups) > 0 {
+			// Multi-group keys are resolved to an actual group by the distributor.
+			// Keeping the first group here also gives pre-distributor middleware a
+			// valid and deterministic group instead of the serialized group list.
+			usingGroup = effectiveGroups[0]
+		}
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 
 		err = SetupContextForToken(c, token, parts...)
 		if err != nil {
 			return
 		}
+		common.SetContextKey(c, constant.ContextKeyTokenGroup, effectiveTokenGroup)
 		c.Next()
 	}
 }

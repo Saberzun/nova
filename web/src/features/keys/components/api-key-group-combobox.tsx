@@ -46,8 +46,8 @@ export type ApiKeyGroupOption = {
 
 type ApiKeyGroupComboboxProps = {
   options: ApiKeyGroupOption[]
-  value?: string
-  onValueChange: (value: string) => void
+  value?: string[]
+  onValueChange: (value: string[]) => void
   placeholder?: string
   disabled?: boolean
 }
@@ -106,7 +106,11 @@ export function ApiKeyGroupCombobox({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
-  const selectedOption = options.find((option) => option.value === value)
+  const selectedValues = value ?? []
+  const optionMap = new Map(options.map((option) => [option.value, option]))
+  const selectedOptions = selectedValues
+    .map((selectedValue) => optionMap.get(selectedValue))
+    .filter((option): option is ApiKeyGroupOption => option !== undefined)
 
   const filteredOptions = useMemo(() => {
     const search = searchValue.trim().toLowerCase()
@@ -124,10 +128,22 @@ export function ApiKeyGroupCombobox({
   }, [options, searchValue])
 
   const handleSelect = (selectedValue: string) => {
-    onValueChange(selectedValue)
-    setOpen(false)
+    if (selectedValue === 'auto') {
+      onValueChange(selectedValues.includes('auto') ? [] : ['auto'])
+    } else if (selectedValues.includes(selectedValue)) {
+      onValueChange(selectedValues.filter((value) => value !== selectedValue))
+    } else {
+      onValueChange([
+        ...selectedValues.filter((value) => value !== 'auto'),
+        selectedValue,
+      ])
+    }
     setSearchValue('')
   }
+
+  const selectedSummary = selectedOptions
+    .map((option) => option.label)
+    .join('、')
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -136,8 +152,9 @@ export function ApiKeyGroupCombobox({
           <Button
             type='button'
             variant='outline'
-            role='combobox'
+            role='listbox'
             aria-expanded={open}
+            aria-multiselectable='true'
             disabled={disabled}
             className='border-input bg-muted/40 hover:bg-muted/55 hover:text-foreground active:bg-background data-popup-open:border-ring data-popup-open:bg-background data-popup-open:ring-ring/20 h-auto min-h-14 w-full justify-between gap-2 rounded-lg px-3 py-2 text-start shadow-none transition-[background-color,border-color,box-shadow] duration-150 data-popup-open:ring-[3px] sm:min-h-20 sm:gap-3 sm:px-4 sm:py-3'
           />
@@ -146,16 +163,17 @@ export function ApiKeyGroupCombobox({
         <span className='flex min-w-0 flex-1 items-center justify-between gap-2 sm:gap-3'>
           <span className='min-w-0'>
             <span className='block truncate font-medium'>
-              {selectedOption?.label || placeholder || t('Select a group')}
+              {selectedOptions.length > 0
+                ? t('{{count}} groups selected', {
+                    count: selectedOptions.length,
+                  })
+                : placeholder || t('Select groups')}
             </span>
-            {selectedOption?.desc && (
+            {selectedSummary && (
               <span className='text-muted-foreground block truncate text-[11px] sm:text-xs'>
-                {selectedOption.desc}
+                {selectedSummary}
               </span>
             )}
-          </span>
-          <span className='hidden sm:block'>
-            <GroupRatioBadge ratio={selectedOption?.ratio} />
           </span>
         </span>
         <ChevronsUpDown className='h-4 w-4 shrink-0 opacity-50' />
@@ -185,7 +203,9 @@ export function ApiKeyGroupCombobox({
                   <Check
                     className={cn(
                       'mt-0.5 h-4 w-4',
-                      value === option.value ? 'opacity-100' : 'opacity-0'
+                      selectedValues.includes(option.value)
+                        ? 'opacity-100'
+                        : 'opacity-0'
                     )}
                   />
                   <span className='min-w-0 flex-1'>

@@ -5362,6 +5362,10 @@
     "fulfilled": "fulfilled",
     "settled": "settled",
     "refunded": "refunded",
-    "reconciliation_required": "reconciliation required"
+    "reconciliation_required": "reconciliation required",
+    "Select groups": "Выберите группы",
+    "{{count}} groups selected": "Выбрано групп: {{count}}",
+    "Please select at least one group": "Выберите хотя бы одну группу",
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "API-ключ может использовать все выбранные группы. Для каждого запроса используется первая выбранная группа, поддерживающая запрошенную модель."
   }
 }

@@ -193,6 +193,13 @@ func getModelListGroups(c *gin.Context) (modelListGroups, error) {
 			ownerGroups: service.GetUserAutoGroup(userGroup),
 		}, nil
 	}
+	if explicitGroups := common.ParseTokenGroups(tokenGroup); len(explicitGroups) > 1 {
+		return modelListGroups{
+			userGroup:   userGroup,
+			tokenGroup:  tokenGroup,
+			ownerGroups: explicitGroups,
+		}, nil
+	}
 
 	group := userGroup
 	if tokenGroup != "" {

@@ -9,7 +9,9 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -175,6 +177,11 @@ func AddToken(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
 	}
+	token.Group, err = common.NormalizeTokenGroups(token.Group)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	if !validateTokenEntitlementGroup(c, c.GetInt("id"), token.Group) {
 		return
 	}
@@ -263,6 +270,13 @@ func UpdateToken(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
 	}
+	if statusOnly == "" {
+		token.Group, err = common.NormalizeTokenGroups(token.Group)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	if statusOnly == "" && !validateTokenEntitlementGroup(c, userId, token.Group) {
 		return
 	}
@@ -318,27 +332,43 @@ func UpdateToken(c *gin.Context) {
 	})
 }
 
-func validateTokenEntitlementGroup(c *gin.Context, userId int, groupName string) bool {
-	groupName = strings.TrimSpace(groupName)
-	if groupName == "" || groupName == "auto" {
+func validateTokenEntitlementGroup(c *gin.Context, userId int, groupValue string) bool {
+	groups := common.ParseTokenGroups(groupValue)
+	if len(groups) == 0 || (len(groups) == 1 && groups[0] == "auto") {
 		return true
 	}
-	_, managed, err := model.GetAccessGroupFundingType(groupName)
+	userGroup, err := model.GetUserGroup(userId, false)
 	if err != nil {
 		common.ApiError(c, err)
 		return false
 	}
-	if !managed {
-		return true
-	}
-	allowed, err := model.UserCanUseEntitlementGroup(userId, groupName)
-	if err != nil {
-		common.ApiError(c, err)
-		return false
-	}
-	if !allowed {
-		common.ApiErrorMsg(c, fmt.Sprintf("当前权益不允许使用 %s 分组", groupName))
-		return false
+	userUsableGroups := service.GetUserUsableGroups(userGroup)
+	for _, groupName := range groups {
+		if !ratio_setting.ContainsGroupRatio(groupName) {
+			common.ApiErrorMsg(c, fmt.Sprintf("分组 %s 不存在或已被弃用", groupName))
+			return false
+		}
+		_, managed, policyErr := model.GetAccessGroupFundingType(groupName)
+		if policyErr != nil {
+			common.ApiError(c, policyErr)
+			return false
+		}
+		if !managed {
+			if _, ok := userUsableGroups[groupName]; !ok {
+				common.ApiErrorMsg(c, fmt.Sprintf("无权使用 %s 分组", groupName))
+				return false
+			}
+			continue
+		}
+		allowed, entitlementErr := model.UserCanUseEntitlementGroup(userId, groupName)
+		if entitlementErr != nil {
+			common.ApiError(c, entitlementErr)
+			return false
+		}
+		if !allowed {
+			common.ApiErrorMsg(c, fmt.Sprintf("当前权益不允许使用 %s 分组", groupName))
+			return false
+		}
 	}
 	return true
 }

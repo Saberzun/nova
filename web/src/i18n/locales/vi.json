@@ -5362,6 +5362,10 @@
     "fulfilled": "fulfilled",
     "settled": "settled",
     "refunded": "refunded",
-    "reconciliation_required": "reconciliation required"
+    "reconciliation_required": "reconciliation required",
+    "Select groups": "Chọn nhóm",
+    "{{count}} groups selected": "Đã chọn {{count}} nhóm",
+    "Please select at least one group": "Vui lòng chọn ít nhất một nhóm",
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "Khóa API có thể sử dụng tất cả các nhóm đã chọn. Với mỗi yêu cầu, hệ thống dùng nhóm đầu tiên theo thứ tự lựa chọn có hỗ trợ mô hình được yêu cầu."
   }
 }

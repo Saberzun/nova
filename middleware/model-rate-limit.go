@@ -180,6 +180,9 @@ func ModelRequestRateLimit() func(c *gin.Context) {
 
 		// 获取分组
 		group := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+		if common.IsMultiTokenGroup(group) {
+			group = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+		}
 		if group == "" {
 			group = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 		}

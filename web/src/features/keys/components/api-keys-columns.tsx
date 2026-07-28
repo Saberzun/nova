@@ -20,7 +20,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
 
-import { BadgeCell, TruncatedCell } from '@/components/data-table'
+import { BadgeCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -195,9 +195,12 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
       cell: ({ row }) => {
         const apiKey = row.original
         const group = row.getValue('group') as string
-        const ratio = group && group !== 'auto' ? groupRatios[group] : undefined
+        const groups = group
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean)
 
-        if (group === 'auto') {
+        if (groups.length === 1 && groups[0] === 'auto') {
           return (
             <Tooltip>
               <TooltipTrigger
@@ -222,14 +225,41 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
             </Tooltip>
           )
         }
+        if (groups.length === 0) return <GroupBadge group='' />
+
         return (
-          <TruncatedCell
-            className='-ml-1.5'
-            tooltipContent={group || '-'}
-            tooltipClassName='break-all'
-          >
-            <GroupBadge group={group} ratio={ratio} />
-          </TruncatedCell>
+          <Tooltip>
+            <TooltipTrigger
+              render={<div className='flex max-w-[220px] items-center gap-1' />}
+            >
+              {groups.slice(0, 2).map((groupName) => (
+                <GroupBadge
+                  key={groupName}
+                  group={groupName}
+                  ratio={groupRatios[groupName]}
+                  className='max-w-24'
+                />
+              ))}
+              {groups.length > 2 && (
+                <StatusBadge
+                  label={`+${groups.length - 2}`}
+                  variant='neutral'
+                  copyable={false}
+                />
+              )}
+            </TooltipTrigger>
+            <TooltipContent className='max-w-sm'>
+              <div className='flex flex-wrap gap-1.5'>
+                {groups.map((groupName) => (
+                  <GroupBadge
+                    key={groupName}
+                    group={groupName}
+                    ratio={groupRatios[groupName]}
+                  />
+                ))}
+              </div>
+            </TooltipContent>
+          </Tooltip>
         )
       },
       size: 160,

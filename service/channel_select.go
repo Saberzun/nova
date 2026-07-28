@@ -153,6 +153,24 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			}
 			break
 		}
+	} else if explicitGroups := common.ParseTokenGroups(param.TokenGroup); len(explicitGroups) > 1 {
+		// An explicit multi-group key is an ordered allow-list. Resolve the
+		// request to the first selected group that can serve this model. Once the
+		// distributor has selected it, RelayInfo pins retries and billing to that
+		// concrete group so different funding sources can never be mixed.
+		for _, explicitGroup := range explicitGroups {
+			channel, err = model.GetRandomSatisfiedChannel(explicitGroup, param.ModelName, param.GetRetry(), param.RequestPath)
+			if err != nil {
+				return nil, explicitGroup, err
+			}
+			if channel == nil {
+				continue
+			}
+			selectGroup = explicitGroup
+			common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroup, explicitGroup)
+			common.SetContextKey(param.Ctx, constant.ContextKeyUsingGroup, explicitGroup)
+			break
+		}
 	} else {
 		channel, err = model.GetRandomSatisfiedChannel(param.TokenGroup, param.ModelName, param.GetRetry(), param.RequestPath)
 		if err != nil {

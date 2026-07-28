@@ -5362,6 +5362,10 @@
     "fulfilled": "fulfilled",
     "settled": "settled",
     "refunded": "refunded",
-    "reconciliation_required": "reconciliation required"
+    "reconciliation_required": "reconciliation required",
+    "Select groups": "グループを選択",
+    "{{count}} groups selected": "{{count}} 個のグループを選択済み",
+    "Please select at least one group": "少なくとも1つのグループを選択してください",
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "APIキーは選択したすべてのグループを使用できます。各リクエストでは、選択順で対象モデルをサポートする最初のグループが使用されます。"
   }
 }

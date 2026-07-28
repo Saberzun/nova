@@ -5362,6 +5362,10 @@
     "fulfilled": "已发货",
     "settled": "已结算",
     "refunded": "已退款",
-    "reconciliation_required": "需要对账"
+    "reconciliation_required": "需要对账",
+    "Select groups": "选择分组",
+    "{{count}} groups selected": "已选择 {{count}} 个分组",
+    "Please select at least one group": "请至少选择一个分组",
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "该 API Key 可使用所有已选分组。每次请求会按选择顺序使用第一个支持所请求模型的分组。"
   }
 }

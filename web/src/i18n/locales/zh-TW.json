@@ -5362,6 +5362,10 @@
     "fulfilled": "fulfilled",
     "settled": "settled",
     "refunded": "refunded",
-    "reconciliation_required": "reconciliation required"
+    "reconciliation_required": "reconciliation required",
+    "Select groups": "選擇分組",
+    "{{count}} groups selected": "已選擇 {{count}} 個分組",
+    "Please select at least one group": "請至少選擇一個分組",
+    "The API key can use all selected groups. For each request, the first selected group that supports the requested model is used.": "此 API Key 可使用所有已選分組。每次請求會依選擇順序使用第一個支援所請求模型的分組。"
   }
 }

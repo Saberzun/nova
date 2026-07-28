@@ -443,6 +443,14 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	//paramOverride := common.GetContextKeyStringMap(c, constant.ContextKeyChannelParamOverride)
 
 	tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+	if common.IsMultiTokenGroup(tokenGroup) {
+		if selectedGroup := common.GetContextKeyString(c, constant.ContextKeyAutoGroup); selectedGroup != "" {
+			// The distributor has resolved the explicit allow-list. Pin relay
+			// retries to this concrete group so billing cannot move between
+			// subscription and stored-value funding sources mid-request.
+			tokenGroup = selectedGroup
+		}
+	}
 	// 当令牌分组为空时，表示使用用户分组
 	if tokenGroup == "" {
 		tokenGroup = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
