@@ -343,19 +343,40 @@ func validateTokenEntitlementGroup(c *gin.Context, userId int, groupValue string
 		return false
 	}
 	userUsableGroups := service.GetUserUsableGroups(userGroup)
+	policyTableAvailable := model.AccessGroupPolicyTableAvailable()
 	for _, groupName := range groups {
 		if !ratio_setting.ContainsGroupRatio(groupName) {
 			common.ApiErrorMsg(c, fmt.Sprintf("分组 %s 不存在或已被弃用", groupName))
 			return false
 		}
-		_, managed, policyErr := model.GetAccessGroupFundingType(groupName)
+		fundingType, policyConfigured, policyErr := model.GetAccessGroupFundingType(groupName)
 		if policyErr != nil {
 			common.ApiError(c, policyErr)
 			return false
 		}
-		if !managed {
+		if !policyConfigured {
+			if policyTableAvailable {
+				common.ApiErrorMsg(c, fmt.Sprintf("分组 %s 未配置资金来源，暂不可消费", groupName))
+				return false
+			}
 			if _, ok := userUsableGroups[groupName]; !ok {
 				common.ApiErrorMsg(c, fmt.Sprintf("无权使用 %s 分组", groupName))
+				return false
+			}
+			continue
+		}
+		if fundingType == model.EntitlementAssetSystemWallet {
+			if _, ok := userUsableGroups[groupName]; !ok {
+				common.ApiErrorMsg(c, fmt.Sprintf("无权使用 %s 分组", groupName))
+				return false
+			}
+			userQuota, quotaErr := model.GetUserQuota(userId, false)
+			if quotaErr != nil {
+				common.ApiError(c, quotaErr)
+				return false
+			}
+			if userQuota <= 0 {
+				common.ApiErrorMsg(c, fmt.Sprintf("%s 分组暂无可消费额度", groupName))
 				return false
 			}
 			continue

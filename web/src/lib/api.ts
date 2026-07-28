@@ -62,7 +62,9 @@ export async function getUserGroups(): Promise<{
     {
       desc: string
       ratio: number | string
-      funding_type?: 'subscription' | 'stored_value'
+      funding_type?: 'subscription' | 'stored_value' | 'system_wallet'
+      selectable?: boolean
+      unavailable_reason?: string
     }
   >
 }> {

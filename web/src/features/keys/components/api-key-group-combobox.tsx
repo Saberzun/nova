@@ -47,6 +47,8 @@ export type ApiKeyGroupOption = {
   desc?: string
   ratio?: number | string
   fundingType?: string
+  selectable?: boolean
+  unavailableReason?: string
 }
 
 type ApiKeyGroupComboboxProps = {
@@ -126,6 +128,17 @@ function FundingTypeBadge({ fundingType }: { fundingType?: string }) {
     )
   }
 
+  if (fundingType === 'system_wallet') {
+    return (
+      <Badge
+        variant='outline'
+        className='border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300'
+      >
+        {t('Balance')}
+      </Badge>
+    )
+  }
+
   return null
 }
 
@@ -140,6 +153,11 @@ function GroupMeta({ option }: { option: ApiKeyGroupOption }) {
       {option.desc && (
         <p className='text-muted-foreground mt-1 line-clamp-2 text-xs leading-5'>
           {option.desc}
+        </p>
+      )}
+      {option.selectable === false && option.unavailableReason && (
+        <p className='text-destructive mt-1 text-xs leading-5'>
+          {option.unavailableReason}
         </p>
       )}
     </div>
@@ -196,6 +214,9 @@ export function ApiKeyGroupCombobox({
   }
 
   const addGroup = (groupValue: string) => {
+    if (optionMap.get(groupValue)?.selectable === false) {
+      return
+    }
     if (groupValue === 'auto') {
       setDraftValues(['auto'])
       return
@@ -250,6 +271,9 @@ export function ApiKeyGroupCombobox({
     onValueChange(draftValues)
     setOpen(false)
   }
+  const hasUnavailableDraftGroup = draftOptions.some(
+    (option) => option.selectable === false
+  )
 
   return (
     <>
@@ -280,7 +304,9 @@ export function ApiKeyGroupCombobox({
             {selectedOptions.map((option, index) => (
               <Badge
                 key={option.value}
-                variant='secondary'
+                variant={
+                  option.selectable === false ? 'destructive' : 'secondary'
+                }
                 className='gap-1.5 rounded-lg px-2.5 py-1.5'
               >
                 <span className='text-muted-foreground tabular-nums'>
@@ -328,13 +354,21 @@ export function ApiKeyGroupCombobox({
                 {filteredOptions.length > 0 ? (
                   filteredOptions.map((option) => {
                     const isSelected = draftValues.includes(option.value)
+                    const isUnavailable = option.selectable === false
+                    let actionLabel = t('Add')
+                    if (isSelected) {
+                      actionLabel = t('Added')
+                    } else if (isUnavailable) {
+                      actionLabel = t('Not available')
+                    }
                     return (
                       <div
                         key={option.value}
                         className={cn(
                           'flex items-start gap-3 rounded-lg border p-3 transition-colors',
                           isSelected &&
-                            'border-emerald-300 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30'
+                            'border-emerald-300 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30',
+                          isUnavailable && 'bg-muted/40 opacity-70'
                         )}
                       >
                         <GroupMeta option={option} />
@@ -342,7 +376,7 @@ export function ApiKeyGroupCombobox({
                           type='button'
                           variant={isSelected ? 'secondary' : 'outline'}
                           size='sm'
-                          disabled={isSelected}
+                          disabled={isSelected || isUnavailable}
                           onClick={() => addGroup(option.value)}
                           className='shrink-0'
                         >
@@ -351,7 +385,7 @@ export function ApiKeyGroupCombobox({
                           ) : (
                             <Plus className='size-3.5' />
                           )}
-                          {isSelected ? t('Added') : t('Add')}
+                          {actionLabel}
                         </Button>
                       </div>
                     )
@@ -387,7 +421,9 @@ export function ApiKeyGroupCombobox({
                       onDrop={(event) => handleDrop(event, option.value)}
                       className={cn(
                         'flex items-start gap-3 rounded-lg border bg-background p-3 transition',
-                        draggedValue === option.value && 'opacity-50'
+                        draggedValue === option.value && 'opacity-50',
+                        option.selectable === false &&
+                          'border-destructive/40 bg-destructive/5'
                       )}
                     >
                       <div className='bg-muted flex size-9 shrink-0 items-center justify-center rounded-lg border text-sm font-semibold tabular-nums'>
@@ -456,7 +492,7 @@ export function ApiKeyGroupCombobox({
             </Button>
             <Button
               type='button'
-              disabled={draftValues.length === 0}
+              disabled={draftValues.length === 0 || hasUnavailableDraftGroup}
               onClick={confirmSelection}
             >
               {t('Confirm')}

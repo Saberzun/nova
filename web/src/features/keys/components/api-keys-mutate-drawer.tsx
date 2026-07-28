@@ -127,6 +127,8 @@ export function ApiKeysMutateDrawer({
       desc: info.desc || key,
       ratio: info.ratio,
       fundingType: info.funding_type,
+      selectable: info.selectable !== false,
+      unavailableReason: info.unavailable_reason,
     })
   )
   const backendHasAuto = groups.some((g) => g.value === 'auto')
@@ -157,24 +159,33 @@ export function ApiKeysMutateDrawer({
   useEffect(() => {
     if (groups.length === 0) return
     const currentGroups = form.getValues('group')
-    const availableValues = new Set(groups.map((group) => group.value))
+    const availableValues = new Set(
+      groups
+        .filter((group) => isUpdate || group.selectable !== false)
+        .map((group) => group.value)
+    )
     const validGroups = currentGroups.filter((group) =>
       availableValues.has(group)
     )
     if (validGroups.length !== currentGroups.length) {
-      const fallback = groups.find((g) => g.value === 'default')?.value
+      const selectableGroups = groups.filter(
+        (group) => group.selectable !== false
+      )
+      const fallback = selectableGroups.find(
+        (group) => group.value === 'default'
+      )?.value
       let nextGroups = validGroups
       if (nextGroups.length === 0 && fallback) {
         nextGroups = [fallback]
-      } else if (nextGroups.length === 0 && groups[0]) {
-        nextGroups = [groups[0].value]
+      } else if (nextGroups.length === 0 && selectableGroups[0]) {
+        nextGroups = [selectableGroups[0].value]
       }
       form.setValue('group', nextGroups)
       if (!validGroups.includes('auto')) {
         form.setValue('cross_group_retry', false)
       }
     }
-  }, [groups, form])
+  }, [groups, form, isUpdate])
 
   const onSubmit = async (data: ApiKeyFormValues) => {
     setIsSubmitting(true)

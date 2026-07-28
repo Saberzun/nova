@@ -315,3 +315,7 @@ func GetAccessGroupFundingType(groupName string) (string, bool, error) {
 	}
 	return policy.FundingSourceType, true, nil
 }
+
+func AccessGroupPolicyTableAvailable() bool {
+	return DB != nil && DB.Migrator().HasTable(&AccessGroupPolicy{})
+}
