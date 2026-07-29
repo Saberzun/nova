@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { getLobeIcon } from '@/lib/lobe-icon'
 
 import { MODEL_PROVIDERS } from '../../constants'
+import { providerWallLayoutClasses } from '../../lib/provider-wall-layout'
 
 export function ProviderWall() {
   const { t } = useTranslation()
@@ -33,19 +34,19 @@ export function ProviderWall() {
           </p>
         </div>
 
-        <div className='bg-border mt-12 grid grid-cols-2 overflow-hidden rounded-3xl border sm:grid-cols-4 lg:grid-cols-5'>
+        <div className={providerWallLayoutClasses.grid}>
           {MODEL_PROVIDERS.map((provider) => (
             <div
               key={provider.name}
               tabIndex={0}
               title={provider.name}
-              className='group bg-background relative flex min-h-32 items-center justify-center p-5 transition-all outline-none hover:z-10 hover:-translate-y-1 hover:rounded-2xl hover:shadow-xl focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-indigo-500'
+              className={providerWallLayoutClasses.item}
             >
-              <div className='flex flex-col items-center gap-3 transition-transform group-hover:scale-105'>
-                <div className='flex size-12 items-center justify-center'>
+              <div className='flex flex-col items-center gap-3'>
+                <div className='flex size-12 items-center justify-center transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105'>
                   {getLobeIcon(provider.icon, 38)}
                 </div>
-                <span className='text-muted-foreground group-hover:text-foreground text-center text-xs font-medium opacity-80 transition-opacity group-hover:opacity-100'>
+                <span className='text-muted-foreground group-hover:text-foreground group-focus-visible:text-foreground text-center text-xs font-medium opacity-80 transition-[color,opacity] duration-200 group-hover:opacity-100 group-focus-visible:opacity-100'>
                   {provider.name}
                 </span>
               </div>
