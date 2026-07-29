@@ -13,6 +13,7 @@ import { describe, test } from 'node:test'
 import {
   buildStoreCatalog,
   calculateRechargeQuota,
+  getSKUAccessGroups,
   isSKUAvailable,
   maximumSKUQuantity,
 } from '../store-catalog'
@@ -130,5 +131,35 @@ describe('quota store catalog layout', () => {
     assert.equal(maximumSKUQuantity(limited), 0)
     assert.equal(isSKUAvailable(unlimited), true)
     assert.equal(maximumSKUQuantity(unlimited), 100)
+  })
+
+  test('uses entitlement type groups as the subscription access scope', () => {
+    const sku = createSKU(11, 1)
+    sku.entitlement_type = {
+      id: 3,
+      code: 'gpt-mix',
+      name: 'GPT Mix',
+      description: '',
+      asset_kind: 'subscription',
+      meter_type: 'quota',
+      status: 'active',
+      revision: 1,
+      groups: [
+        {
+          id: 1,
+          entitlement_type_id: 3,
+          access_group_policy_id: 1,
+          group_name: 'gpt-mix-sub',
+        },
+        {
+          id: 2,
+          entitlement_type_id: 3,
+          access_group_policy_id: 2,
+          group_name: 'gpt-pro-sub',
+        },
+      ],
+    }
+
+    assert.deepEqual(getSKUAccessGroups(sku), ['gpt-mix-sub', 'gpt-pro-sub'])
   })
 })

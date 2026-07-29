@@ -22,7 +22,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { formatQuota } from '@/lib/format'
 
-import { isSKUAvailable, maximumSKUQuantity } from '../store-catalog'
+import {
+  getSKUAccessGroups,
+  isSKUAvailable,
+  maximumSKUQuantity,
+} from '../store-catalog'
 import type { Product, ProductSKU } from '../types'
 
 interface StoreSKUCardProps {
@@ -44,6 +48,7 @@ export function StoreSKUCard(props: StoreSKUCardProps) {
   const totalAmount = props.sku.price_amount_minor * quantity
   const soldOut = !isSKUAvailable(props.sku)
   const maximumQuantity = Math.max(1, maximumSKUQuantity(props.sku))
+  const accessGroups = getSKUAccessGroups(props.sku)
   let actionLabel = t('Buy now')
   if (props.loading) actionLabel = t('Processing')
   if (soldOut) actionLabel = t('Sold out')
@@ -67,6 +72,24 @@ export function StoreSKUCard(props: StoreSKUCardProps) {
         ) : null}
       </CardHeader>
       <CardContent className='flex-1 space-y-4'>
+        <div>
+          <p className='text-muted-foreground mb-2 text-xs font-medium'>
+            {t('Available groups')}
+          </p>
+          <div className='flex flex-wrap gap-1.5'>
+            {accessGroups.length > 0 ? (
+              accessGroups.map((group) => (
+                <Badge key={group} variant='secondary'>
+                  {group}
+                </Badge>
+              ))
+            ) : (
+              <span className='text-muted-foreground text-sm'>
+                {t('No groups configured')}
+              </span>
+            )}
+          </div>
+        </div>
         <div className='bg-background/70 grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border p-4 text-sm'>
           <div>
             <p className='text-muted-foreground'>{t('Total quota')}</p>

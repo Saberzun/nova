@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ChevronRight, Copy } from 'lucide-react'
+import { ChevronRight, Copy, Tags } from 'lucide-react'
 import { memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -30,6 +30,7 @@ import {
   getDynamicPricingSummary,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
+import { getDiscountLabel } from '../lib/model-card'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
 import type { PricingModel, TokenUnit } from '../types'
@@ -56,6 +57,9 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const showRechargePrice = props.showRechargePrice ?? false
   const isTokenBased = isTokenBasedModel(props.model)
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
+  const priceUnitLabel = isTokenBased
+    ? `/${tokenUnitLabel} tokens`
+    : `/${t('request')}`
   const tags = parseTags(props.model.tags)
   const groups = props.model.enable_groups || []
   const endpoints = props.model.supported_endpoint_types || []
@@ -66,6 +70,9 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     props.model.billing_mode === 'tiered_expr' &&
     Boolean(props.model.billing_expr)
   const hasCachedPrice = isTokenBased && props.model.cache_ratio != null
+  const hasCacheWritePrice =
+    isTokenBased && props.model.create_cache_ratio != null
+  const discountLabel = getDiscountLabel(props.model.model_ratio)
   const dynamicSummary = isDynamicPricing
     ? getDynamicPricingSummary(props.model, {
         tokenUnit,
@@ -78,13 +85,6 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         ),
       })
     : null
-
-  const primaryGroup = groups[0]
-  const bottomTags = [...endpoints.slice(0, 2), ...tags.slice(0, 2)]
-  const hiddenCount =
-    Math.max(groups.length - 1, 0) +
-    Math.max(endpoints.length - 2, 0) +
-    Math.max(tags.length - 2, 0)
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -158,9 +158,25 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             )}
           </span>
         </span>
+        {hasCacheWritePrice && (
+          <span className='text-muted-foreground whitespace-nowrap'>
+            {t('Cache write')}{' '}
+            <span className='text-foreground font-mono font-semibold'>
+              {formatPrice(
+                props.model,
+                'create_cache',
+                tokenUnit,
+                showRechargePrice,
+                priceRate,
+                usdExchangeRate,
+                props.selectedGroup
+              )}
+            </span>
+          </span>
+        )}
         {hasCachedPrice && (
           <span className='text-muted-foreground whitespace-nowrap'>
-            {t('Cached')}{' '}
+            {t('Cache read')}{' '}
             <span className='text-foreground font-mono font-semibold'>
               {formatPrice(
                 props.model,
@@ -196,10 +212,28 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   return (
     <div
       className={cn(
-        'group relative flex flex-col rounded-xl border p-3 transition-colors sm:p-5',
-        'hover:bg-muted/20'
+        'group relative flex flex-col overflow-hidden rounded-2xl border bg-background p-4 transition-all sm:p-5',
+        'hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg dark:hover:border-indigo-500/40'
       )}
     >
+      <div className='mb-4 flex min-h-6 flex-wrap items-center gap-2'>
+        {tags.slice(0, 2).map((tag) => (
+          <span
+            key={tag}
+            className='inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300'
+          >
+            <Tags className='size-3' />
+            {tag}
+          </span>
+        ))}
+        {discountLabel && (
+          <span className='rounded-full bg-rose-500/10 px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-300'>
+            {discountLabel}
+          </span>
+        )}
+        <ModelBillingModeBadge model={props.model} />
+      </div>
+
       {/* Header: icon + name + price + actions */}
       <div className='flex items-start justify-between gap-2.5 sm:gap-3'>
         <div className='flex min-w-0 items-start gap-2.5 sm:gap-3'>
@@ -214,9 +248,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             <h3 className='text-foreground truncate font-mono text-[15px] leading-tight font-bold'>
               {props.model.model_name}
             </h3>
-            <div className='mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm sm:mt-1 sm:gap-x-3'>
-              {priceSummary}
-            </div>
+            {props.model.vendor_name && (
+              <p className='text-muted-foreground mt-1 text-xs'>
+                {props.model.vendor_name}
+              </p>
+            )}
           </div>
         </div>
 
@@ -240,38 +276,34 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         </div>
       </div>
 
-      {/* Description */}
-      <p className='text-muted-foreground mt-2 line-clamp-1 flex-1 text-[13px] leading-relaxed sm:mt-4 sm:line-clamp-2 sm:min-h-[2.5rem]'>
+      <p className='text-muted-foreground mt-4 line-clamp-2 min-h-10 flex-1 text-[13px] leading-relaxed'>
         {props.model.description || t('No description available.')}
       </p>
 
-      {/* Footer: left metadata and right performance summary share row alignment */}
-      <div className='mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 sm:mt-4'>
-        <div className='flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1'>
-          {primaryGroup && (
-            <span className='text-muted-foreground text-sm font-medium'>
-              {primaryGroup}
-            </span>
-          )}
-          <ModelBillingModeBadge model={props.model} />
+      <div className='bg-muted/15 mt-4 rounded-xl border p-3'>
+        <div className='text-muted-foreground mb-2 flex items-center justify-between text-[11px] font-medium'>
+          <span>{t('Price')}</span>
+          <span>{priceUnitLabel}</span>
         </div>
-        <ModelPerfBadge perf={props.perf} className='row-span-2 self-start' />
+        <div className='grid grid-cols-2 gap-x-4 gap-y-2 text-xs'>
+          {priceSummary}
+        </div>
+      </div>
 
-        <div className='flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 sm:gap-x-3 sm:gap-y-1'>
-          {bottomTags.map((item) => (
-            <span key={item} className='text-muted-foreground/70 text-xs'>
-              {item}
-            </span>
-          ))}
-          <span className='text-muted-foreground/50 text-xs'>
-            {tokenUnitLabel}
+      {props.perf && <ModelPerfBadge perf={props.perf} className='mt-3' />}
+
+      <div className='text-muted-foreground mt-3 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 text-[11px]'>
+        {groups.slice(0, 2).map((group) => (
+          <span key={group}>{group}</span>
+        ))}
+        {endpoints.slice(0, 2).map((endpoint) => (
+          <span key={endpoint} className='bg-muted rounded px-1.5 py-0.5'>
+            {endpoint}
           </span>
-          {hiddenCount > 0 && (
-            <span className='text-muted-foreground/40 text-xs'>
-              +{hiddenCount}
-            </span>
-          )}
-        </div>
+        ))}
+        {groups.length + endpoints.length > 4 && (
+          <span>+{groups.length + endpoints.length - 4}</span>
+        )}
       </div>
     </div>
   )

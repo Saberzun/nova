@@ -20,7 +20,8 @@ For commercial licensing, please contact support@quantumnous.com
  * Home page constants
  * All hardcoded data for home page sections
  */
-import { type TFunction } from 'i18next'
+import type { TFunction } from 'i18next'
+import { BriefcaseBusiness, Code2, GraduationCap, Palette } from 'lucide-react'
 
 // Layout - Main base classes
 export const MAIN_BASE_CLASSES = 'bg-background text-foreground w-full'
@@ -41,6 +42,111 @@ export const AI_MODELS = [
   'OpenAI',
   'Claude.Color',
   'Gemini.Color',
+] as const
+
+export const QUICK_START_STEPS = [
+  {
+    number: '01',
+    title: 'Configure',
+    description: 'Create an API key and choose the quota groups it can use.',
+  },
+  {
+    number: '02',
+    title: 'Connect',
+    description: 'Replace the API base URL in your existing AI application.',
+  },
+  {
+    number: '03',
+    title: 'Monitor',
+    description:
+      'Review usage, quota, latency, and service health in one place.',
+  },
+] as const
+
+export const AUDIENCE_SCENARIOS = [
+  {
+    key: 'students',
+    title: 'Students',
+    subtitle: 'Learn more efficiently and grow faster',
+    description:
+      'Turn complex assignments into clear steps and finish research with confidence.',
+    icon: GraduationCap,
+    tone: 'violet',
+    features: [
+      'Assignment breakdown',
+      'Paper polishing',
+      'Programming experiments',
+      'Data analysis',
+    ],
+  },
+  {
+    key: 'professionals',
+    title: 'Professionals',
+    subtitle: 'Work smarter and double your efficiency',
+    description:
+      'Summarize documents, prepare reports, and automate repetitive office work.',
+    icon: BriefcaseBusiness,
+    tone: 'blue',
+    features: [
+      'Weekly reports and plans',
+      'Document summaries',
+      'Spreadsheet scripts',
+      'Office automation',
+    ],
+  },
+  {
+    key: 'developers',
+    title: 'Developers',
+    subtitle: 'Connect multiple clients with one API',
+    description:
+      'Use standard protocols, managed keys, and reliable routing to ship faster.',
+    icon: Code2,
+    tone: 'emerald',
+    features: [
+      'Multi-client compatibility',
+      'Shorter integration path',
+      'Stable and reliable',
+      'Secure and controllable',
+    ],
+  },
+  {
+    key: 'designers',
+    title: 'Designers',
+    subtitle: 'Open up ideas and extend creativity',
+    description:
+      'Explore more visual directions and produce images, scripts, and videos.',
+    icon: Palette,
+    tone: 'amber',
+    features: [
+      'Creative inspiration',
+      'Unlimited concepts',
+      'Image output',
+      'Video output',
+    ],
+  },
+] as const
+
+export const MODEL_PROVIDERS = [
+  { name: 'OpenAI', icon: 'OpenAI.Color' },
+  { name: 'Anthropic', icon: 'Claude.Color' },
+  { name: 'Google Gemini', icon: 'Gemini.Color' },
+  { name: 'xAI', icon: 'Grok' },
+  { name: 'DeepSeek', icon: 'DeepSeek.Color' },
+  { name: 'Moonshot AI', icon: 'Moonshot.Color' },
+  { name: 'Alibaba Qwen', icon: 'Qwen.Color' },
+  { name: 'Zhipu AI', icon: 'ChatGLM.Color' },
+  { name: 'ByteDance', icon: 'Doubao.Color' },
+  { name: 'MiniMax', icon: 'Minimax.Color' },
+  { name: 'Cohere', icon: 'Cohere.Color' },
+  { name: 'Mistral AI', icon: 'Mistral.Color' },
+  { name: 'Meta Llama', icon: 'Meta.Color' },
+  { name: 'Microsoft Azure', icon: 'Azure.Color' },
+  { name: 'Amazon Bedrock', icon: 'Aws.Color' },
+  { name: 'NVIDIA', icon: 'Nvidia.Color' },
+  { name: 'Suno', icon: 'Suno.Color' },
+  { name: 'SiliconFlow', icon: 'SiliconCloud.Color' },
+  { name: 'OpenRouter', icon: 'OpenRouter' },
+  { name: 'Together AI', icon: 'Together.Color' },
 ] as const
 
 // Hero section - Gateway Features

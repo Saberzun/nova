@@ -44,6 +44,12 @@ export function maximumSKUQuantity(sku: ProductSKU): number {
   return Math.min(100, Math.max(0, sku.stock))
 }
 
+export function getSKUAccessGroups(sku: ProductSKU): string[] {
+  return (sku.entitlement_type?.groups ?? [])
+    .map((group) => group.group_name.trim())
+    .filter(Boolean)
+}
+
 export function buildStoreCatalog(products: Product[]): StoreCatalog {
   const catalog: StoreCatalog = { recharge: [], subscription: [] }
   const orderedProducts = [...products].sort(

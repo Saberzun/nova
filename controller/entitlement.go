@@ -449,6 +449,7 @@ func AdminUpdateProductSKU(c *gin.Context) {
 func ListStoreProducts(c *gin.Context) {
 	var products []model.Product
 	if err := model.DB.Preload("SKUs", "status = ?", model.ProductStatusActive).
+		Preload("SKUs.EntitlementType.Groups").
 		Where("status = ?", model.ProductStatusActive).
 		Order("sort_order desc, id desc").Find(&products).Error; err != nil {
 		common.ApiError(c, err)

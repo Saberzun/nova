@@ -17,7 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 export { CTA } from './sections/cta'
+export { AudienceScenarios } from './sections/audience-scenarios'
 export { Features } from './sections/features'
 export { Hero } from './sections/hero'
 export { HowItWorks } from './sections/how-it-works'
+export { PlatformHero } from './sections/platform-hero'
+export { ProviderWall } from './sections/provider-wall'
 export { Stats } from './sections/stats'

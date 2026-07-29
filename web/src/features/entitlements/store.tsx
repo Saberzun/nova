@@ -26,7 +26,7 @@ import {
   payStoreOrderEpay,
 } from './api'
 import { StoreRechargeCard } from './components/store-recharge-card'
-import { StoreSKUCard } from './components/store-sku-card'
+import { StoreSubscriptionComparison } from './components/store-subscription-comparison'
 import { formatDate, submitEpayForm } from './lib'
 import { buildStoreCatalog } from './store-catalog'
 import type { ProductSKU } from './types'
@@ -205,19 +205,13 @@ export function EntitlementStore(props: EntitlementStoreProps) {
               </p>
             </div>
             {catalog.subscription.length > 0 ? (
-              <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
-                {catalog.subscription.map((item) => (
-                  <StoreSKUCard
-                    key={item.sku.id}
-                    product={item.product}
-                    sku={item.sku}
-                    loading={purchase.isPending}
-                    onPurchase={(sku, quantity) =>
-                      purchase.mutate({ sku, quantity })
-                    }
-                  />
-                ))}
-              </div>
+              <StoreSubscriptionComparison
+                items={catalog.subscription}
+                loading={purchase.isPending}
+                onPurchase={(sku, quantity) =>
+                  purchase.mutate({ sku, quantity })
+                }
+              />
             ) : (
               <p className='text-muted-foreground rounded-xl border border-dashed p-6 text-sm'>
                 {catalogEmptyMessage}

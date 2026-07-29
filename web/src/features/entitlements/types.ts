@@ -71,6 +71,7 @@ export interface ProductSKU {
   multi_quantity_enabled: boolean
   status: EntityStatus
   sort_order: number
+  entitlement_type?: EntitlementType
 }
 
 export interface Product {
