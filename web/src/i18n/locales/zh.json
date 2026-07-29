@@ -5451,6 +5451,13 @@
     "Quantity for {{name}}": "{{name}} 的购买数量",
     "Account access": "账号登录与注册",
     "Welcome back": "欢迎回来",
+    "itokenify platform introduction": "itokenify 平台介绍",
+    "itokenify logo": "itokenify 标识",
+    "Welcome to itokenify": "欢迎使用 itokenify",
+    "One gateway for": "统一的",
+    "leading AI models": "大模型接口网关",
+    "Access leading models, manage API keys, and keep quota, subscriptions, and usage clear in one place.": "登录后即可使用主流模型、管理 API 密钥，并随时掌握额度、订阅和使用记录。",
+    "Powered by": "Powered by",
     "Sign in to manage API keys, quota, and usage.": "登录后管理 API 密钥、可用额度和使用记录。",
     "Create an account to receive and manage your API quota.": "注册账号后即可获取并管理 API 额度。"
   }

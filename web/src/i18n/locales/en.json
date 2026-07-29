@@ -5451,6 +5451,13 @@
     "Quantity for {{name}}": "Quantity for {{name}}",
     "Account access": "Account access",
     "Welcome back": "Welcome back",
+    "itokenify platform introduction": "itokenify platform introduction",
+    "itokenify logo": "itokenify logo",
+    "Welcome to itokenify": "Welcome to itokenify",
+    "One gateway for": "One gateway for",
+    "leading AI models": "leading AI models",
+    "Access leading models, manage API keys, and keep quota, subscriptions, and usage clear in one place.": "Access leading models, manage API keys, and keep quota, subscriptions, and usage clear in one place.",
+    "Powered by": "Powered by",
     "Sign in to manage API keys, quota, and usage.": "Sign in to manage API keys, quota, and usage.",
     "Create an account to receive and manage your API quota.": "Create an account to receive and manage your API quota."
   }

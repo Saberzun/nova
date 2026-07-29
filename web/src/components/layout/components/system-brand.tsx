@@ -24,8 +24,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
+import { BUSINESS_BRAND } from '@/config/business-brand'
 import { useStatus } from '@/hooks/use-status'
-import { useSystemConfig } from '@/hooks/use-system-config'
 import { cn } from '@/lib/utils'
 
 type SystemBrandProps = {
@@ -48,10 +48,10 @@ type SystemBrandProps = {
 export function SystemBrand(props: SystemBrandProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
-  const { logo } = useSystemConfig()
 
   const variant = props.variant ?? 'sidebar'
-  const name = status?.system_name || props.defaultName || 'New API'
+  const name = props.defaultName || BUSINESS_BRAND.name
+  const logo = BUSINESS_BRAND.logo
   const version =
     status?.version || props.defaultVersion || t('Unknown version')
 
