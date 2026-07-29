@@ -17,6 +17,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useStatus } from '@/hooks/use-status'
 
 import { QUICK_START_STEPS } from '../../constants'
+import { resolveApiBaseUrl } from '../../lib/api-base-url'
 
 interface PlatformHeroProps {
   isAuthenticated: boolean
@@ -32,9 +33,9 @@ export function PlatformHero(props: PlatformHeroProps) {
     const configured =
       (status?.server_address as string | undefined) ||
       (status?.data?.server_address as string | undefined)
-    if (configured) return configured.replace(/\/+$/, '')
-    if (typeof window !== 'undefined') return window.location.origin
-    return ''
+    const browserOrigin =
+      typeof window !== 'undefined' ? window.location.origin : ''
+    return resolveApiBaseUrl(configured, browserOrigin)
   }, [status])
   const startPath = props.isAuthenticated ? '/dashboard' : '/sign-in'
 
