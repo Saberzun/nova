@@ -19,5 +19,5 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const BUSINESS_BRAND = {
   name: 'itokenify',
-  logo: '/itokenify-mark.svg',
+  logo: '/itokenify-logo.png',
 } as const

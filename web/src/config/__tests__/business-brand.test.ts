@@ -16,19 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export function applyFaviconToDom(url: string) {
-  if (typeof document === 'undefined' || !url) return
-  try {
-    const next = new URL(url, window.location.href).href
-    const existing =
-      document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')
-    if (existing.length === 1 && existing[0].href === next) return
-    const link = document.createElement('link')
-    link.rel = 'icon'
-    link.href = url
-    existing.forEach((l) => l.remove())
-    document.head.appendChild(link)
-  } catch {
-    // Ignore malformed URLs
-  }
-}
+
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { describe, test } from 'node:test'
+
+import { BUSINESS_BRAND } from '../business-brand'
+
+describe('itokenify business brand', () => {
+  test('uses the supplied PNG logo asset', () => {
+    assert.equal(BUSINESS_BRAND.logo, '/itokenify-logo.png')
+
+    const logo = readFileSync('public/itokenify-logo.png')
+    assert.deepEqual(
+      [...logo.subarray(0, 8)],
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+    )
+  })
+})

@@ -92,18 +92,6 @@ export function AuthLayout(props: AuthLayoutProps) {
           <span className='text-muted-foreground/55'>
             &copy; {currentYear} {BUSINESS_BRAND.name}
           </span>
-          <span aria-hidden='true' className='text-muted-foreground/30'>
-            ·
-          </span>
-          <span className='text-muted-foreground/55'>{t('Powered by')}</span>
-          <a
-            href='https://github.com/QuantumNous/new-api'
-            target='_blank'
-            rel='noopener noreferrer'
-            className='text-foreground/70 hover:text-foreground font-medium transition-colors'
-          >
-            {t('New API')}
-          </a>
         </div>
       </section>
 
@@ -140,16 +128,6 @@ export function AuthLayout(props: AuthLayoutProps) {
             <span>
               &copy; {currentYear} {BUSINESS_BRAND.name}
             </span>
-            <span aria-hidden='true'>·</span>
-            <span>{t('Powered by')}</span>
-            <a
-              href='https://github.com/QuantumNous/new-api'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-foreground/70 hover:text-foreground font-medium transition-colors'
-            >
-              {t('New API')}
-            </a>
           </div>
         </div>
       </section>
