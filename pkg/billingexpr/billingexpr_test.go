@@ -291,9 +291,9 @@ func TestQuotaRound(t *testing.T) {
 		{999.4999, 999},
 		{999.5, 1000},
 		{1e9 + 0.5, 1e9 + 1},
-		// Oversized expression results saturate at int32 (delegated to
+		// Oversized expression results saturate at int64 (delegated to
 		// common.QuotaRound); full saturation coverage lives in common.
-		{3.6893488147419103e19, math.MaxInt32},
+		{3.6893488147419103e19, math.MaxInt64},
 	}
 	for _, tt := range tests {
 		got := billingexpr.QuotaRound(tt.in)
@@ -318,7 +318,7 @@ func TestComputeTieredQuota_Basic(t *testing.T) {
 		EstimatedQuotaBeforeGroup: (100000*1.5 + 5000*7.5) / 1_000_000 * 500_000,
 		EstimatedQuotaAfterGroup:  billingexpr.QuotaRound((100000*1.5 + 5000*7.5) / 1_000_000 * 500_000),
 		EstimatedTier:             "standard",
-		QuotaPerUnit:              500_000,
+		LedgerUnitsPerUSD:         500_000,
 	}
 
 	result, err := billingexpr.ComputeTieredQuota(snap, billingexpr.TokenParams{P: 300000, C: 10000})
@@ -349,7 +349,7 @@ func TestComputeTieredQuota_SameTier(t *testing.T) {
 		EstimatedQuotaBeforeGroup: (50000*1.5 + 1000*7.5) / 1_000_000 * 500_000,
 		EstimatedQuotaAfterGroup:  billingexpr.QuotaRound((50000*1.5 + 1000*7.5) / 1_000_000 * 500_000 * 1.5),
 		EstimatedTier:             "standard",
-		QuotaPerUnit:              500_000,
+		LedgerUnitsPerUSD:         500_000,
 	}
 
 	result, err := billingexpr.ComputeTieredQuota(snap, billingexpr.TokenParams{P: 80000, C: 2000})
@@ -541,7 +541,7 @@ func TestComputeTieredQuota_WithCache(t *testing.T) {
 		EstimatedQuotaBeforeGroup: (100000*1.5 + 5000*7.5) / 1_000_000 * 500_000,
 		EstimatedQuotaAfterGroup:  billingexpr.QuotaRound((100000*1.5 + 5000*7.5) / 1_000_000 * 500_000),
 		EstimatedTier:             "standard",
-		QuotaPerUnit:              500_000,
+		LedgerUnitsPerUSD:         500_000,
 	}
 
 	params := billingexpr.TokenParams{P: 100000, C: 5000, CR: 50000, CC: 10000}
@@ -573,7 +573,7 @@ func TestComputeTieredQuota_WithCacheCrossTier(t *testing.T) {
 		EstimatedQuotaBeforeGroup: (100000*1.5 + 5000*7.5) / 1_000_000 * 500_000,
 		EstimatedQuotaAfterGroup:  billingexpr.QuotaRound((100000*1.5 + 5000*7.5) / 1_000_000 * 500_000 * 2.0),
 		EstimatedTier:             "standard",
-		QuotaPerUnit:              500_000,
+		LedgerUnitsPerUSD:         500_000,
 	}
 
 	params := billingexpr.TokenParams{P: 300000, C: 10000, CR: 50000, CC: 10000}
@@ -602,11 +602,11 @@ func TestComputeTieredQuota_WithCacheCrossTier(t *testing.T) {
 func TestComputeTieredQuota_BasicSettlement(t *testing.T) {
 	exprStr := `tier("default", p + c)`
 	snap := &billingexpr.BillingSnapshot{
-		BillingMode:  "tiered_expr",
-		ExprString:   exprStr,
-		ExprHash:     billingexpr.ExprHashString(exprStr),
-		GroupRatio:   1.0,
-		QuotaPerUnit: 500_000,
+		BillingMode:       "tiered_expr",
+		ExprString:        exprStr,
+		ExprHash:          billingexpr.ExprHashString(exprStr),
+		GroupRatio:        1.0,
+		LedgerUnitsPerUSD: 500_000,
 	}
 
 	result, err := billingexpr.ComputeTieredQuota(snap, billingexpr.TokenParams{P: 3000, C: 2000})
@@ -628,11 +628,11 @@ func TestComputeTieredQuota_BasicSettlement(t *testing.T) {
 func TestComputeTieredQuota_WithGroupRatio(t *testing.T) {
 	exprStr := `tier("default", p + c)`
 	snap := &billingexpr.BillingSnapshot{
-		BillingMode:  "tiered_expr",
-		ExprString:   exprStr,
-		ExprHash:     billingexpr.ExprHashString(exprStr),
-		GroupRatio:   2.0,
-		QuotaPerUnit: 500_000,
+		BillingMode:       "tiered_expr",
+		ExprString:        exprStr,
+		ExprHash:          billingexpr.ExprHashString(exprStr),
+		GroupRatio:        2.0,
+		LedgerUnitsPerUSD: 500_000,
 	}
 
 	result, err := billingexpr.ComputeTieredQuota(snap, billingexpr.TokenParams{P: 1000, C: 500})
@@ -648,11 +648,11 @@ func TestComputeTieredQuota_WithGroupRatio(t *testing.T) {
 func TestComputeTieredQuota_ZeroTokens(t *testing.T) {
 	exprStr := `tier("default", p * 2 + c * 10)`
 	snap := &billingexpr.BillingSnapshot{
-		BillingMode:  "tiered_expr",
-		ExprString:   exprStr,
-		ExprHash:     billingexpr.ExprHashString(exprStr),
-		GroupRatio:   1.0,
-		QuotaPerUnit: 500_000,
+		BillingMode:       "tiered_expr",
+		ExprString:        exprStr,
+		ExprHash:          billingexpr.ExprHashString(exprStr),
+		GroupRatio:        1.0,
+		LedgerUnitsPerUSD: 500_000,
 	}
 
 	result, err := billingexpr.ComputeTieredQuota(snap, billingexpr.TokenParams{})
@@ -667,11 +667,11 @@ func TestComputeTieredQuota_ZeroTokens(t *testing.T) {
 func TestComputeTieredQuota_RoundingEdge(t *testing.T) {
 	exprStr := `tier("default", p * 0.5)` // 3 * 0.5 = 1.5 (expr); 1.5 / 1M * 500K = 0.75; round(0.75) = 1
 	snap := &billingexpr.BillingSnapshot{
-		BillingMode:  "tiered_expr",
-		ExprString:   exprStr,
-		ExprHash:     billingexpr.ExprHashString(exprStr),
-		GroupRatio:   1.0,
-		QuotaPerUnit: 500_000,
+		BillingMode:       "tiered_expr",
+		ExprString:        exprStr,
+		ExprHash:          billingexpr.ExprHashString(exprStr),
+		GroupRatio:        1.0,
+		LedgerUnitsPerUSD: 500_000,
 	}
 
 	result, err := billingexpr.ComputeTieredQuota(snap, billingexpr.TokenParams{P: 3})
@@ -687,11 +687,11 @@ func TestComputeTieredQuota_RoundingEdge(t *testing.T) {
 func TestComputeTieredQuota_RoundingEdgeDown(t *testing.T) {
 	exprStr := `tier("default", p * 0.4)` // 3 * 0.4 = 1.2 (expr); 1.2 / 1M * 500K = 0.6; round(0.6) = 1
 	snap := &billingexpr.BillingSnapshot{
-		BillingMode:  "tiered_expr",
-		ExprString:   exprStr,
-		ExprHash:     billingexpr.ExprHashString(exprStr),
-		GroupRatio:   1.0,
-		QuotaPerUnit: 500_000,
+		BillingMode:       "tiered_expr",
+		ExprString:        exprStr,
+		ExprHash:          billingexpr.ExprHashString(exprStr),
+		GroupRatio:        1.0,
+		LedgerUnitsPerUSD: 500_000,
 	}
 
 	result, err := billingexpr.ComputeTieredQuota(snap, billingexpr.TokenParams{P: 3})
@@ -707,12 +707,12 @@ func TestComputeTieredQuota_RoundingEdgeDown(t *testing.T) {
 func TestComputeTieredQuotaWithRequest_ProbeAffectsQuota(t *testing.T) {
 	exprStr := `param("fast") == true ? tier("fast", p * 4) : tier("normal", p * 2)`
 	snap := &billingexpr.BillingSnapshot{
-		BillingMode:   "tiered_expr",
-		ExprString:    exprStr,
-		ExprHash:      billingexpr.ExprHashString(exprStr),
-		GroupRatio:    1.0,
-		EstimatedTier: "normal",
-		QuotaPerUnit:  500_000,
+		BillingMode:       "tiered_expr",
+		ExprString:        exprStr,
+		ExprHash:          billingexpr.ExprHashString(exprStr),
+		GroupRatio:        1.0,
+		EstimatedTier:     "normal",
+		LedgerUnitsPerUSD: 500_000,
 	}
 
 	// Without request: normal tier
@@ -744,12 +744,12 @@ func TestComputeTieredQuotaWithRequest_ProbeAffectsQuota(t *testing.T) {
 func TestComputeTieredQuota_BoundaryTierCrossing(t *testing.T) {
 	exprStr := `p <= 100000 ? tier("small", p * 1) : tier("large", p * 2)`
 	snap := &billingexpr.BillingSnapshot{
-		BillingMode:   "tiered_expr",
-		ExprString:    exprStr,
-		ExprHash:      billingexpr.ExprHashString(exprStr),
-		GroupRatio:    1.0,
-		EstimatedTier: "small",
-		QuotaPerUnit:  500_000,
+		BillingMode:       "tiered_expr",
+		ExprString:        exprStr,
+		ExprHash:          billingexpr.ExprHashString(exprStr),
+		GroupRatio:        1.0,
+		EstimatedTier:     "small",
+		LedgerUnitsPerUSD: 500_000,
 	}
 
 	// At boundary: small, p*1 = 100000; quota = 100000 / 1M * 500K = 50000

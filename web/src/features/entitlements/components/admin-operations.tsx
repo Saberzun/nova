@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { formatQuota } from '@/lib/format'
 
 import {
@@ -35,23 +36,33 @@ import {
   resetProductOrderPayment,
   revokeEntitlement,
 } from '../api'
+import { hasAtMostDecimalPlaces, usdToQuotaUnits } from '../form-units'
 import { formatDate } from '../lib'
 import { AdminFormField } from './admin-form-field'
+
+const quotaAmountSchema = z
+  .number()
+  .min(0)
+  .refine((value) => hasAtMostDecimalPlaces(value, 4), {
+    message: 'Use no more than 4 decimal places',
+  })
 
 const grantSchema = z.object({
   user_id: z.number().int().positive(),
   entitlement_type_id: z.number().int().positive(),
-  total_quota: z.number().int().positive(),
-  daily_quota: z.number().int().min(0),
+  total_quota_usd: quotaAmountSchema.refine((value) => value > 0),
+  daily_quota_usd: quotaAmountSchema,
   validity_days: z.number().int().min(0),
 })
 
 const adjustmentSchema = z.object({
   entitlement_id: z.number().int().positive(),
-  delta_quota: z
+  delta_quota_usd: z
     .number()
-    .int()
-    .refine((value) => value !== 0),
+    .refine((value) => value !== 0)
+    .refine((value) => hasAtMostDecimalPlaces(value, 4), {
+      message: 'Use no more than 4 decimal places',
+    }),
   reason: z.string().trim().min(1),
 })
 
@@ -60,6 +71,8 @@ type AdjustmentForm = z.infer<typeof adjustmentSchema>
 
 export function AdminOperations() {
   const { t } = useTranslation()
+  const { currency } = useSystemConfig()
+  const quotaPerUnit = currency.quotaPerUnit
   const orderStatusLabel = (status: string) =>
     t(status === 'pending' ? 'Pending payment' : status)
   const queryClient = useQueryClient()
@@ -110,14 +123,14 @@ export function AdminOperations() {
     defaultValues: {
       user_id: 0,
       entitlement_type_id: 0,
-      total_quota: 500000,
-      daily_quota: 0,
+      total_quota_usd: 1,
+      daily_quota_usd: 0,
       validity_days: 30,
     },
   })
   const adjustmentForm = useForm<AdjustmentForm>({
     resolver: zodResolver(adjustmentSchema),
-    defaultValues: { entitlement_id: 0, delta_quota: 0, reason: '' },
+    defaultValues: { entitlement_id: 0, delta_quota_usd: 0, reason: '' },
   })
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['entitlement-admin'] })
@@ -130,8 +143,8 @@ export function AdminOperations() {
       const now = Math.floor(Date.now() / 1000)
       return grantEntitlement(values.user_id, {
         entitlement_type_id: values.entitlement_type_id,
-        total_quota: values.total_quota,
-        daily_quota: values.daily_quota,
+        total_quota: usdToQuotaUnits(values.total_quota_usd, quotaPerUnit),
+        daily_quota: usdToQuotaUnits(values.daily_quota_usd, quotaPerUnit),
         expire_at:
           values.validity_days > 0 ? now + values.validity_days * 86400 : 0,
         asset_kind: type?.asset_kind ?? 'subscription',
@@ -152,7 +165,7 @@ export function AdminOperations() {
   const adjust = useMutation({
     mutationFn: (values: AdjustmentForm) =>
       adjustEntitlement(values.entitlement_id, {
-        delta_quota: values.delta_quota,
+        delta_quota: usdToQuotaUnits(values.delta_quota_usd, quotaPerUnit),
         reason: values.reason,
         idempotency_key: `admin-${values.entitlement_id}-${Date.now()}`,
       }),
@@ -261,18 +274,22 @@ export function AdminOperations() {
                   ))}
                 </NativeSelect>
               </AdminFormField>
-              <AdminFormField label={t('Total quota')}>
+              <AdminFormField label={t('Total quota (USD)')}>
                 <Input
                   type='number'
-                  {...grantForm.register('total_quota', {
+                  min='0.0001'
+                  step='0.0001'
+                  {...grantForm.register('total_quota_usd', {
                     valueAsNumber: true,
                   })}
                 />
               </AdminFormField>
-              <AdminFormField label={t('Daily quota')}>
+              <AdminFormField label={t('Daily quota (USD)')}>
                 <Input
                   type='number'
-                  {...grantForm.register('daily_quota', {
+                  min='0'
+                  step='0.0001'
+                  {...grantForm.register('daily_quota_usd', {
                     valueAsNumber: true,
                   })}
                 />
@@ -292,6 +309,12 @@ export function AdminOperations() {
               >
                 {t('Grant')}
               </Button>
+              <p className='text-muted-foreground text-xs sm:col-span-2'>
+                {t(
+                  'Quota is entered in USD and converted automatically using $1 = {{quota}} internal units.',
+                  { quota: quotaPerUnit.toLocaleString() }
+                )}
+              </p>
             </form>
           </CardContent>
         </Card>
@@ -315,10 +338,11 @@ export function AdminOperations() {
                   })}
                 />
               </AdminFormField>
-              <AdminFormField label={t('Quota delta')}>
+              <AdminFormField label={t('Quota delta (USD)')}>
                 <Input
                   type='number'
-                  {...adjustmentForm.register('delta_quota', {
+                  step='0.0001'
+                  {...adjustmentForm.register('delta_quota_usd', {
                     valueAsNumber: true,
                   })}
                 />

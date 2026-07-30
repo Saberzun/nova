@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { useSystemConfig } from '@/hooks/use-system-config'
 import { formatQuota } from '@/lib/format'
 
 import {
@@ -31,6 +32,13 @@ import {
   updateProduct,
   updateProductSKU,
 } from '../api'
+import {
+  hasAtMostDecimalPlaces,
+  majorAmountToMinorUnits,
+  minorUnitsToMajorAmount,
+  quotaUnitsToUSD,
+  usdToQuotaUnits,
+} from '../form-units'
 import { AdminFormField } from './admin-form-field'
 
 const productSchema = z.object({
@@ -42,16 +50,30 @@ const productSchema = z.object({
   sort_order: z.number().int(),
 })
 
+const currencyAmountSchema = z
+  .number()
+  .min(0)
+  .refine((value) => hasAtMostDecimalPlaces(value, 2), {
+    message: 'Use no more than 2 decimal places',
+  })
+
+const quotaAmountSchema = z
+  .number()
+  .min(0)
+  .refine((value) => hasAtMostDecimalPlaces(value, 4), {
+    message: 'Use no more than 4 decimal places',
+  })
+
 const skuSchema = z.object({
   product_id: z.number().int().positive(),
   entitlement_type_id: z.number().int().positive(),
   code: z.string().trim().min(1),
   name: z.string().trim().min(1),
-  price_amount_minor: z.number().int().min(0),
-  grant_total_quota: z.number().int().positive(),
-  grant_daily_quota: z.number().int().min(0),
-  min_recharge_amount_minor: z.number().int().min(0),
-  max_recharge_amount_minor: z.number().int().min(0),
+  price_amount: currencyAmountSchema,
+  grant_total_quota_usd: quotaAmountSchema.refine((value) => value > 0),
+  grant_daily_quota_usd: quotaAmountSchema,
+  min_recharge_amount: currencyAmountSchema,
+  max_recharge_amount: currencyAmountSchema,
   validity_seconds: z.number().int().min(0),
   activation_policy: z.enum(['immediate', 'manual', 'deferred']),
   activation_deadline_seconds: z.number().int().min(0),
@@ -68,6 +90,8 @@ type SKUForm = z.infer<typeof skuSchema>
 
 export function AdminProducts() {
   const { t } = useTranslation()
+  const { currency } = useSystemConfig()
+  const quotaPerUnit = currency.quotaPerUnit
   const activationPolicyLabels = {
     immediate: t('Immediate'),
     manual: t('Manual activation'),
@@ -102,11 +126,11 @@ export function AdminProducts() {
       entitlement_type_id: 0,
       code: '',
       name: '',
-      price_amount_minor: 0,
-      grant_total_quota: 500000,
-      grant_daily_quota: 0,
-      min_recharge_amount_minor: 100,
-      max_recharge_amount_minor: 1000000,
+      price_amount: 0,
+      grant_total_quota_usd: 1,
+      grant_daily_quota_usd: 0,
+      min_recharge_amount: 1,
+      max_recharge_amount: 10000,
       validity_seconds: 2592000,
       activation_policy: 'immediate',
       activation_deadline_seconds: 0,
@@ -146,7 +170,23 @@ export function AdminProducts() {
   })
   const saveSKU = useMutation({
     mutationFn: (input: { id: number | null; values: SKUForm }) => {
-      const payload = { ...input.values, currency: 'CNY' }
+      const {
+        price_amount,
+        grant_total_quota_usd,
+        grant_daily_quota_usd,
+        min_recharge_amount,
+        max_recharge_amount,
+        ...values
+      } = input.values
+      const payload = {
+        ...values,
+        currency: 'CNY',
+        price_amount_minor: majorAmountToMinorUnits(price_amount),
+        grant_total_quota: usdToQuotaUnits(grant_total_quota_usd, quotaPerUnit),
+        grant_daily_quota: usdToQuotaUnits(grant_daily_quota_usd, quotaPerUnit),
+        min_recharge_amount_minor: majorAmountToMinorUnits(min_recharge_amount),
+        max_recharge_amount_minor: majorAmountToMinorUnits(max_recharge_amount),
+      }
       return input.id
         ? updateProductSKU(input.id, payload)
         : createProductSKU(payload)
@@ -314,21 +354,25 @@ export function AdminProducts() {
               <AdminFormField
                 label={
                   isRechargeSKU
-                    ? t('Recharge pricing basis in cents')
-                    : t('Price in cents')
+                    ? t('Recharge pricing basis (CNY)')
+                    : t('Price (CNY)')
                 }
               >
                 <Input
                   type='number'
-                  {...skuForm.register('price_amount_minor', {
+                  min='0'
+                  step='0.01'
+                  {...skuForm.register('price_amount', {
                     valueAsNumber: true,
                   })}
                 />
               </AdminFormField>
-              <AdminFormField label={t('Grant total quota')}>
+              <AdminFormField label={t('Grant total quota (USD)')}>
                 <Input
                   type='number'
-                  {...skuForm.register('grant_total_quota', {
+                  min='0.0001'
+                  step='0.0001'
+                  {...skuForm.register('grant_total_quota_usd', {
                     valueAsNumber: true,
                   })}
                 />
@@ -340,18 +384,22 @@ export function AdminProducts() {
                       'Recharge price and quota define the conversion rate. Customers choose the actual amount at checkout.'
                     )}
                   </p>
-                  <AdminFormField label={t('Minimum recharge amount in cents')}>
+                  <AdminFormField label={t('Minimum recharge amount (CNY)')}>
                     <Input
                       type='number'
-                      {...skuForm.register('min_recharge_amount_minor', {
+                      min='0'
+                      step='0.01'
+                      {...skuForm.register('min_recharge_amount', {
                         valueAsNumber: true,
                       })}
                     />
                   </AdminFormField>
-                  <AdminFormField label={t('Maximum recharge amount in cents')}>
+                  <AdminFormField label={t('Maximum recharge amount (CNY)')}>
                     <Input
                       type='number'
-                      {...skuForm.register('max_recharge_amount_minor', {
+                      min='0'
+                      step='0.01'
+                      {...skuForm.register('max_recharge_amount', {
                         valueAsNumber: true,
                       })}
                     />
@@ -365,14 +413,22 @@ export function AdminProducts() {
                   ) : null}
                 </>
               ) : null}
-              <AdminFormField label={t('Grant daily quota')}>
+              <AdminFormField label={t('Grant daily quota (USD)')}>
                 <Input
                   type='number'
-                  {...skuForm.register('grant_daily_quota', {
+                  min='0'
+                  step='0.0001'
+                  {...skuForm.register('grant_daily_quota_usd', {
                     valueAsNumber: true,
                   })}
                 />
               </AdminFormField>
+              <p className='text-muted-foreground text-xs sm:col-span-2'>
+                {t(
+                  'Quota is entered in USD and converted automatically using $1 = {{quota}} internal units.',
+                  { quota: quotaPerUnit.toLocaleString() }
+                )}
+              </p>
               <AdminFormField label={t('Validity seconds')}>
                 <Input
                   type='number'
@@ -550,8 +606,14 @@ export function AdminProducts() {
                     </span>
                   </div>
                   <p className='text-muted-foreground'>
-                    {formatQuota(sku.grant_total_quota)} ·{' '}
-                    {activationPolicyLabels[sku.activation_policy]}
+                    {t('Total quota')}: {formatQuota(sku.grant_total_quota)}
+                  </p>
+                  <p className='text-muted-foreground'>
+                    {t('Daily quota')}:{' '}
+                    {sku.grant_daily_quota > 0
+                      ? formatQuota(sku.grant_daily_quota)
+                      : t('Unlimited')}{' '}
+                    · {activationPolicyLabels[sku.activation_policy]}
                   </p>
                   {product.category === 'recharge' ? (
                     <p className='text-muted-foreground'>
@@ -572,13 +634,23 @@ export function AdminProducts() {
                         entitlement_type_id: sku.entitlement_type_id,
                         code: sku.code,
                         name: sku.name,
-                        price_amount_minor: sku.price_amount_minor,
-                        grant_total_quota: sku.grant_total_quota,
-                        grant_daily_quota: sku.grant_daily_quota,
-                        min_recharge_amount_minor:
-                          sku.min_recharge_amount_minor,
-                        max_recharge_amount_minor:
-                          sku.max_recharge_amount_minor,
+                        price_amount: minorUnitsToMajorAmount(
+                          sku.price_amount_minor
+                        ),
+                        grant_total_quota_usd: quotaUnitsToUSD(
+                          sku.grant_total_quota,
+                          quotaPerUnit
+                        ),
+                        grant_daily_quota_usd: quotaUnitsToUSD(
+                          sku.grant_daily_quota,
+                          quotaPerUnit
+                        ),
+                        min_recharge_amount: minorUnitsToMajorAmount(
+                          sku.min_recharge_amount_minor
+                        ),
+                        max_recharge_amount: minorUnitsToMajorAmount(
+                          sku.max_recharge_amount_minor
+                        ),
                         validity_seconds: sku.validity_seconds,
                         activation_policy: sku.activation_policy,
                         activation_deadline_seconds:

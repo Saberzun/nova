@@ -57,11 +57,11 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 		BillingRatios: map[string]float64{"n": 3},
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1500, priceData.QuotaToPreConsume)
+	require.Equal(t, 3_000_000, priceData.QuotaToPreConsume)
 	require.NotNil(t, info.TieredBillingSnapshot)
 	require.Equal(t, "stream", info.TieredBillingSnapshot.EstimatedTier)
 	require.Equal(t, billing_setting.BillingModeTieredExpr, info.TieredBillingSnapshot.BillingMode)
-	require.Equal(t, common.QuotaPerUnit, info.TieredBillingSnapshot.QuotaPerUnit)
+	require.Equal(t, common.NanoUSDPerUSD, info.TieredBillingSnapshot.LedgerUnitsPerUSD)
 }
 
 func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
@@ -92,19 +92,19 @@ func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
 	}{
 		{
 			// max_tokens omitted in a paid group -> fall back to 8192 completion tokens.
-			// p*3 + c*15 = 1000*3 + 8192*15 = 125880 -> /1e6 * 500000 = 62940
+			// p*3 + c*15 = 125880 micro-dollars -> 125,880,000 nanoUSD.
 			name:      "non-free group falls back to 8192 completion tokens",
 			group:     "default",
 			maxTokens: 0,
-			expected:  62940,
+			expected:  125_880_000,
 		},
 		{
 			// explicit max_tokens is used verbatim, no fallback.
-			// 1000*3 + 100*15 = 4500 -> /1e6 * 500000 = 2250
+			// 1000*3 + 100*15 = 4500 micro-dollars -> 4,500,000 nanoUSD.
 			name:      "explicit max_tokens is used verbatim",
 			group:     "default",
 			maxTokens: 100,
-			expected:  2250,
+			expected:  4_500_000,
 		},
 		{
 			// free group (ratio 0) stays zero; fallback is gated on non-zero group ratio.
@@ -193,7 +193,7 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 	modelPrices, err := common.Marshal(map[string]float64{
 		"fixed-image-price":      0.04,
 		"fractional-image-price": 0.0000012,
-		"overflow-image-price":   float64(common.MaxQuota) / common.QuotaPerUnit / 2,
+		"overflow-image-price":   float64(common.MaxQuota) / common.NanoUSDPerUSD / 2,
 	})
 	require.NoError(t, err)
 	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(modelPrices)))
@@ -211,14 +211,14 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 		{
 			name:           "fixed price applies image count",
 			model:          "fixed-image-price",
-			wantQuota:      180000,
+			wantQuota:      360_000_000,
 			wantUsePrice:   true,
 			wantImageCount: true,
 		},
 		{
 			name:         "ratio price ignores request billing ratios",
 			model:        "ratio-image-price",
-			wantQuota:    15000,
+			wantQuota:    30_000_000,
 			wantUsePrice: false,
 		},
 	}
@@ -262,7 +262,7 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 	priceData, err := ModelPriceHelper(ctx, info, 0, meta)
 	require.NoError(t, err)
 	// 0.0000012 * 500000 * 3 = 1.8, then truncate once to 1.
-	require.Equal(t, 1, priceData.QuotaToPreConsume)
+	require.Equal(t, 3600, priceData.QuotaToPreConsume)
 
 	ctx, info = newInfo("overflow-image-price")
 	_, err = ModelPriceHelper(ctx, info, 0, meta)

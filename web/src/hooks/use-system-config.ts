@@ -43,6 +43,7 @@ interface StatusApiResponse {
     display_token_stat_enabled?: boolean
     display_in_currency?: boolean
     quota_display_type?: CurrencyDisplayType
+    ledger_units_per_usd?: number
     quota_per_unit?: number
     usd_exchange_rate?: number
     custom_currency_symbol?: string
@@ -76,7 +77,7 @@ export function mapStatusDataToConfig(
       data.display_in_currency ?? DEFAULT_CURRENCY_CONFIG.displayInCurrency,
     quotaDisplayType,
     quotaPerUnit: toNumber(
-      data.quota_per_unit,
+      data.ledger_units_per_usd ?? data.quota_per_unit,
       DEFAULT_CURRENCY_CONFIG.quotaPerUnit
     ),
     usdExchangeRate: toNumber(

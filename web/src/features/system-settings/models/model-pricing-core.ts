@@ -91,6 +91,60 @@ export const EMPTY_LANE_ENABLED: Record<LaneKey, boolean> = {
   audioOutput: false,
 }
 
+const directPriceVariableByLane: Record<LaneKey, string> = {
+  completion: 'c',
+  cache: 'cr',
+  createCache: 'cc',
+  image: 'img',
+  audioInput: 'ai',
+  audioOutput: 'ao',
+}
+
+export function buildDirectPriceExpression(
+  promptPrice: string,
+  lanePrices: Record<LaneKey, string>,
+  laneEnabled: Record<LaneKey, boolean>
+): string {
+  const terms = [`p * ${formatPricingNumber(Number(promptPrice))}`]
+  laneConfigs.forEach(({ key }) => {
+    if (!laneEnabled[key] || !hasValue(lanePrices[key])) return
+    terms.push(
+      `${directPriceVariableByLane[key]} * ${formatPricingNumber(Number(lanePrices[key]))}`
+    )
+  })
+  return `tier("direct-price", ${terms.join(' + ')})`
+}
+
+export function parseDirectPriceExpression(expression?: string): {
+  promptPrice: string
+  prices: Record<LaneKey, string>
+  enabled: Record<LaneKey, boolean>
+} | null {
+  const match = expression
+    ?.trim()
+    .match(/^tier\("direct-price",\s*(.+)\)$/)
+  if (!match) return null
+
+  const coefficients = new Map<string, string>()
+  for (const term of match[1].split('+')) {
+    const termMatch = term.trim().match(/^([a-z_]+)\s*\*\s*(\d+(?:\.\d+)?)$/)
+    if (!termMatch) return null
+    coefficients.set(termMatch[1], termMatch[2])
+  }
+  const promptPrice = coefficients.get('p')
+  if (!promptPrice) return null
+
+  const prices = { ...EMPTY_LANE_PRICES }
+  const enabled = { ...EMPTY_LANE_ENABLED }
+  laneConfigs.forEach(({ key }) => {
+    const value = coefficients.get(directPriceVariableByLane[key])
+    if (value === undefined) return
+    prices[key] = value
+    enabled[key] = true
+  })
+  return { promptPrice, prices, enabled }
+}
+
 export const ratioFieldByLane: Record<LaneKey, keyof ModelPricingFormValues> = {
   completion: 'completionRatio',
   cache: 'cacheRatio',
@@ -181,6 +235,9 @@ export function createInitialLaneState(data?: ModelRatioData | null) {
       enabled: { ...EMPTY_LANE_ENABLED },
     }
   }
+
+  const directPrices = parseDirectPriceExpression(data.billingExpr)
+  if (directPrices) return directPrices
 
   const promptPrice = ratioToBasePrice(data.ratio)
   const audioInputPrice = deriveLanePrice(data.audioRatio, promptPrice)

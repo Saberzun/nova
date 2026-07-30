@@ -319,6 +319,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := migrateBillingLedgerToNanoUSD(); err != nil {
+		return err
+	}
 	if err := DB.Model(&ProductSKU{}).Where("stock > 0 AND stock_limited = ?", false).Update("stock_limited", true).Error; err != nil {
 		return err
 	}
@@ -415,6 +418,9 @@ func migrateDBFast() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := migrateBillingLedgerToNanoUSD(); err != nil {
+		return err
 	}
 	if err := DB.Model(&ProductSKU{}).Where("stock > 0 AND stock_limited = ?", false).Update("stock_limited", true).Error; err != nil {
 		return err

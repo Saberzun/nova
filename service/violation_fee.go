@@ -89,7 +89,7 @@ func calcViolationFeeQuota(amount, groupRatio float64) int {
 		return 0
 	}
 	quota := decimal.NewFromFloat(amount).
-		Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
+		Mul(decimal.NewFromFloat(common.NanoUSDPerUSD)).
 		Mul(decimal.NewFromFloat(groupRatio)).
 		Round(0).
 		IntPart()

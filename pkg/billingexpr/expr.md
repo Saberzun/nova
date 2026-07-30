@@ -158,7 +158,7 @@ When a request arrives and the model uses `tiered_expr` billing:
 1. Loads expression from `billing_setting.GetBillingExpr()`
 2. Builds `RequestInput` (headers + body) for `param()` / `header()` functions
 3. Runs expression with estimated tokens: `RunExprWithRequest(expr, {P, C}, requestInput)`
-4. Converts output to quota: `rawCost / 1,000,000 * QuotaPerUnit`
+4. Converts USD output to fixed nanoUSD: `rawCost / 1,000,000 * 1,000,000,000`
 5. Creates `BillingSnapshot` (frozen state for settlement) and stores on `RelayInfo`
 
 ### 4. Settlement (Actual Billing)
@@ -217,10 +217,10 @@ This ensures that heavy cache usage doesn't cause the tier condition to incorrec
 Expression coefficients are $/1M tokens. Conversion to internal quota:
 
 ```
-quota = exprOutput / 1,000,000 * QuotaPerUnit * groupRatio
+nanoUSD = exprOutput / 1,000,000 * 1,000,000,000 * groupRatio
 ```
 
-This matches the per-call billing pattern: `quota = modelPrice * QuotaPerUnit * groupRatio`.
+Per-request prices use the same fixed ledger: `nanoUSD = modelPriceUSD * 1,000,000,000 * groupRatio`.
 
 ### Expression Versioning
 

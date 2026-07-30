@@ -49,8 +49,24 @@ type BillingSnapshot struct {
 	EstimatedQuotaBeforeGroup float64 `json:"estimated_quota_before_group"`
 	EstimatedQuotaAfterGroup  int     `json:"estimated_quota_after_group"`
 	EstimatedTier             string  `json:"estimated_tier"`
-	QuotaPerUnit              float64 `json:"quota_per_unit"`
-	ExprVersion               int     `json:"expr_version"`
+	LedgerUnitsPerUSD         float64 `json:"ledger_units_per_usd"`
+	// QuotaPerUnit is read only for in-flight requests created before the
+	// nanoUSD deployment. New snapshots leave it empty.
+	QuotaPerUnit float64 `json:"quota_per_unit,omitempty"`
+	ExprVersion  int     `json:"expr_version"`
+}
+
+func (s *BillingSnapshot) EffectiveLedgerUnitsPerUSD() float64 {
+	if s == nil {
+		return 0
+	}
+	if s.LedgerUnitsPerUSD > 0 {
+		return s.LedgerUnitsPerUSD
+	}
+	if s.QuotaPerUnit > 0 {
+		return common.NanoUSDPerUSD
+	}
+	return 0
 }
 
 // TieredResult holds everything needed after running tiered settlement.
@@ -59,7 +75,7 @@ type TieredResult struct {
 	ActualQuotaAfterGroup  int     `json:"actual_quota_after_group"`
 	MatchedTier            string  `json:"matched_tier"`
 	CrossedTier            bool    `json:"crossed_tier"`
-	// Clamp records an int32 saturation event during quota conversion so the
+	// Clamp records an int64 saturation event during quota conversion so the
 	// caller can surface it on the consume log for admin auditing. Nil when no
 	// clamping occurred. Not serialized: the marker is attached separately via
 	// the shared quota-saturation audit path.

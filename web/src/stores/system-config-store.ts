@@ -28,7 +28,7 @@ export interface CurrencyConfig {
   displayInCurrency: boolean
   /** Currency presentation strategy configured by the admin */
   quotaDisplayType: CurrencyDisplayType
-  /** Number of quota units that equal one USD */
+  /** Fixed nanoUSD ledger units that equal one USD */
   quotaPerUnit: number
   /** Exchange rate from USD to the configured local currency */
   usdExchangeRate: number
@@ -50,7 +50,7 @@ export interface SystemConfig {
 export const DEFAULT_CURRENCY_CONFIG: CurrencyConfig = {
   displayInCurrency: true,
   quotaDisplayType: 'USD',
-  quotaPerUnit: 500000,
+  quotaPerUnit: 1000000000,
   usdExchangeRate: 1,
   customCurrencySymbol: '¤',
   customCurrencyExchangeRate: 1,

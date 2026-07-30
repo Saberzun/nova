@@ -84,7 +84,6 @@ const BILLING_SECTIONS = [
     build: (settings: BillingSettings) => (
       <PricingSection
         defaultValues={{
-          QuotaPerUnit: settings.QuotaPerUnit,
           USDExchangeRate: settings.USDExchangeRate,
           DisplayInCurrencyEnabled: settings.DisplayInCurrencyEnabled,
           DisplayTokenStatEnabled: settings.DisplayTokenStatEnabled,

@@ -19,7 +19,15 @@ var TopUpLink = ""
 
 // var ChatLink = ""
 // var ChatLink2 = ""
-var QuotaPerUnit = 500 * 1000.0 // $0.002 / 1K tokens
+// NanoUSDPerUSD is the fixed ledger scale. Billing values are stored as
+// integer nano-dollars so upstream USD prices can be applied without a
+// configurable token-to-quota exchange ratio.
+const NanoUSDPerUSD = 1_000_000_000.0
+
+// LegacyQuotaToNanoUSD preserves the monetary meaning of the historical
+// $2-per-million-token ratio model while old pricing records are phased out.
+const LegacyQuotaToNanoUSD = 2_000.0
+
 // 保留旧变量以兼容历史逻辑，实际展示由 general_setting.quota_display_type 控制
 var DisplayInCurrencyEnabled = true
 var DisplayTokenStatEnabled = true
@@ -127,7 +135,7 @@ var QuotaForInvitee = 0
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false
-var QuotaRemindThreshold = 1000
+var QuotaRemindThreshold = 2_000_000
 var PreConsumedQuota = 500
 
 var RetryTimes = 0

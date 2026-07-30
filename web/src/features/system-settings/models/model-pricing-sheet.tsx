@@ -67,11 +67,13 @@ import {
   EMPTY_LANE_ENABLED,
   EMPTY_LANE_PRICES,
   buildPreviewRows,
+  buildDirectPriceExpression,
   createInitialLaneState,
   createModelPricingSchema,
   hasValue,
   laneConfigs,
   numericDraftRegex,
+  parseDirectPriceExpression,
   ratioFieldByLane,
   toNumberOrNull,
   type LaneKey,
@@ -188,13 +190,16 @@ export const ModelPricingEditorPanel = forwardRef<
         audioRatio: editData.audioRatio || '',
         audioCompletionRatio: editData.audioCompletionRatio || '',
       })
-      setPricingMode(
-        editData.billingMode === 'tiered_expr'
-          ? 'tiered_expr'
-          : editData.price
-            ? 'per-request'
-            : 'per-token'
-      )
+      let nextPricingMode: PricingMode = 'per-token'
+      if (
+        editData.billingMode === 'tiered_expr' &&
+        !parseDirectPriceExpression(editData.billingExpr)
+      ) {
+        nextPricingMode = 'tiered_expr'
+      } else if (editData.price) {
+        nextPricingMode = 'per-request'
+      }
+      setPricingMode(nextPricingMode)
       setBillingExpr(editData.billingExpr || '')
       setRequestRuleExpr(editData.requestRuleExpr || '')
     } else {
@@ -389,10 +394,7 @@ export const ModelPricingEditorPanel = forwardRef<
 
     if (
       pricingMode === 'per-token' &&
-      toNumberOrNull(promptPrice) === null &&
-      laneConfigs.some(
-        ({ key }) => laneEnabled[key] && hasValue(lanePrices[key])
-      )
+      toNumberOrNull(promptPrice) === null
     ) {
       nextWarnings.push(
         t('Input price is required before saving dependent prices.')
@@ -456,11 +458,25 @@ export const ModelPricingEditorPanel = forwardRef<
       if (pricingMode === 'tiered_expr') {
         data.billingExpr = billingExpr
         data.requestRuleExpr = requestRuleExpr
+      } else if (pricingMode === 'per-token') {
+        data.billingMode = 'tiered_expr'
+        data.billingExpr = buildDirectPriceExpression(
+          promptPrice,
+          lanePrices,
+          laneEnabled
+        )
       }
 
       return data
     },
-    [billingExpr, pricingMode, requestRuleExpr]
+    [
+      billingExpr,
+      laneEnabled,
+      lanePrices,
+      pricingMode,
+      promptPrice,
+      requestRuleExpr,
+    ]
   )
 
   useImperativeHandle(

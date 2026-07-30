@@ -32,7 +32,6 @@ const defaultBillingSettings: BillingSettings = {
   TopUpLink: '',
   'general_setting.docs_link': '',
   'quota_setting.enable_free_model_pre_consume': true,
-  QuotaPerUnit: 500000,
   USDExchangeRate: 7,
   'general_setting.quota_display_type': 'USD',
   'general_setting.custom_currency_symbol': '¤',
@@ -103,8 +102,8 @@ const defaultBillingSettings: BillingSettings = {
   WaffoPancakeStoreID: '',
   WaffoPancakeProductID: '',
   'checkin_setting.enabled': false,
-  'checkin_setting.min_quota': 1000,
-  'checkin_setting.max_quota': 10000,
+  'checkin_setting.min_quota': 2000000,
+  'checkin_setting.max_quota': 20000000,
 }
 
 export function BillingSettings() {

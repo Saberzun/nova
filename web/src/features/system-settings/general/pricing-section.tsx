@@ -40,7 +40,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { DEFAULT_CURRENCY_CONFIG } from '@/stores/system-config-store'
 
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
@@ -58,7 +57,6 @@ import { safeNumberFieldProps } from '../utils/numeric-field'
 const createPricingSchema = (t: (key: string) => string) =>
   z
     .object({
-      QuotaPerUnit: z.coerce.number().min(0, t('Value must be at least 0')),
       USDExchangeRate: z.coerce
         .number()
         .min(0.0001, t('Exchange rate must be greater than 0')),
@@ -139,9 +137,6 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
   const displayType = form.watch('general_setting.quota_display_type') ?? 'USD'
   const displayInCurrencyEnabled = form.watch('DisplayInCurrencyEnabled')
   const showTokensOnlyOption = displayType === 'TOKENS'
-  const showQuotaPerUnit =
-    displayType === 'TOKENS' ||
-    defaultValues.QuotaPerUnit !== DEFAULT_CURRENCY_CONFIG.quotaPerUnit
   const showDisplayInCurrencyOption = displayInCurrencyEnabled === false
 
   return (
@@ -158,33 +153,6 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
               isResetDisabled={!isDirty}
             />
             <FormDirtyIndicator isDirty={isDirty} />
-            {showQuotaPerUnit && (
-              <FormField
-                control={form.control}
-                name='QuotaPerUnit'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Quota Per Unit')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type='number'
-                        step='0.01'
-                        value={field.value as number}
-                        disabled
-                        name={field.name}
-                        onBlur={field.onBlur}
-                        ref={field.ref}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t('Number of tokens per unit quota')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
             <FormField
               control={form.control}
               name='general_setting.quota_display_type'
@@ -238,9 +206,7 @@ export function PricingSection({ defaultValues }: PricingSectionProps) {
                     <FormLabel>
                       {displayType === 'CNY'
                         ? t('CNY per USD')
-                        : displayType === 'USD'
-                          ? t('USD Exchange Rate')
-                          : t('USD Exchange Rate')}
+                        : t('USD Exchange Rate')}
                     </FormLabel>
                     <FormControl>
                       <Input

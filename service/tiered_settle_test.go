@@ -33,7 +33,7 @@ func makeSnapshot(expr string, groupRatio float64, estPrompt, estCompletion int)
 		GroupRatio:                groupRatio,
 		EstimatedPromptTokens:     estPrompt,
 		EstimatedCompletionTokens: estCompletion,
-		QuotaPerUnit:              testQuotaPerUnit,
+		LedgerUnitsPerUSD:         testQuotaPerUnit,
 	}
 }
 
@@ -65,7 +65,7 @@ func TestTryTieredSettleUsesFrozenRequestInput(t *testing.T) {
 			EstimatedPromptTokens:     100,
 			EstimatedCompletionTokens: 0,
 			EstimatedQuotaAfterGroup:  50,
-			QuotaPerUnit:              testQuotaPerUnit,
+			LedgerUnitsPerUSD:         testQuotaPerUnit,
 		},
 		BillingRequestInput: &billingexpr.RequestInput{
 			Body: []byte(`{"service_tier":"fast"}`),
