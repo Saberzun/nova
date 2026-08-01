@@ -22,12 +22,14 @@ import {
 import { Input } from '@/components/ui/input'
 import { formatQuota } from '@/lib/format'
 
-import { calculateRechargeQuota, isSKUAvailable } from '../store-catalog'
+import {
+  calculateRechargeQuota,
+  isRechargeQuotaValid,
+  isSKUAvailable,
+} from '../store-catalog'
 import type { Product, ProductSKU } from '../types'
 
 const suggestedAmountsMinor = [1_000, 5_000, 10_000, 20_000]
-const maximumGrantQuota = 2_147_483_647
-
 interface StoreRechargeCardProps {
   product: Product
   sku: ProductSKU
@@ -57,7 +59,7 @@ export function StoreRechargeCard(props: StoreRechargeCardProps) {
     ? calculateRechargeQuota(props.sku, amountMinor)
     : 0
   const amountIsValid =
-    amountIsInRange && estimatedQuota > 0 && estimatedQuota <= maximumGrantQuota
+    amountIsInRange && isRechargeQuotaValid(estimatedQuota)
   const soldOut = !isSKUAvailable(props.sku)
   let actionLabel = t('Recharge now')
   if (props.loading) actionLabel = t('Processing')

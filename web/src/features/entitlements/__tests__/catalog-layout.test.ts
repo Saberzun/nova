@@ -14,6 +14,7 @@ import {
   buildStoreCatalog,
   calculateRechargeQuota,
   getSKUAccessGroups,
+  isRechargeQuotaValid,
   isSKUAvailable,
   maximumSKUQuantity,
 } from '../store-catalog'
@@ -118,6 +119,19 @@ describe('quota store catalog layout', () => {
 
     assert.equal(calculateRechargeQuota(sku, 2_500), 1_375)
     assert.equal(calculateRechargeQuota(sku, 0), 0)
+  })
+
+  test('accepts nanoUSD recharge quotas above the legacy 32-bit limit', () => {
+    const sku = createSKU(11, 1)
+    sku.price_amount_minor = 100
+    sku.grant_total_quota = 1_000_000_000
+
+    const quota = calculateRechargeQuota(sku, 1_000)
+
+    assert.equal(quota, 10_000_000_000)
+    assert.equal(isRechargeQuotaValid(quota), true)
+    assert.equal(isRechargeQuotaValid(0), false)
+    assert.equal(isRechargeQuotaValid(Number.MAX_SAFE_INTEGER + 1), false)
   })
 
   test('treats zero limited stock as sold out without affecting unlimited SKUs', () => {

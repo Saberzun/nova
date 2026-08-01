@@ -35,6 +35,10 @@ export function calculateRechargeQuota(
   )
 }
 
+export function isRechargeQuotaValid(quota: number): boolean {
+  return Number.isSafeInteger(quota) && quota > 0
+}
+
 export function isSKUAvailable(sku: ProductSKU): boolean {
   return !sku.stock_limited || sku.stock > 0
 }
