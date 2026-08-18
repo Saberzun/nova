@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { TopNavLink } from '../types'
+import { Footer } from './footer'
 import { PublicHeader, type PublicHeaderProps } from './public-header'
 
 type PublicLayoutProps = {
@@ -46,13 +47,16 @@ export function PublicLayout(props: PublicLayoutProps) {
         {...props.headerProps}
       />
 
-      {props.showMainContainer !== false ? (
-        <main className='container px-4 py-6 pt-20 md:px-4'>
-          {props.children}
-        </main>
-      ) : (
-        props.children
-      )}
+      <div className='flex min-h-svh flex-col'>
+        {props.showMainContainer !== false ? (
+          <main className='container flex-1 px-4 py-6 pt-20 md:px-4'>
+            {props.children}
+          </main>
+        ) : (
+          <main className='flex-1'>{props.children}</main>
+        )}
+        <Footer />
+      </div>
     </div>
   )
 }

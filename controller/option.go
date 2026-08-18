@@ -3,11 +3,11 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
@@ -40,6 +40,18 @@ func isPositiveOptionValue(value string) bool {
 	}
 	floatValue, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 	return err == nil && floatValue > 0
+}
+
+func normalizeAPIBaseURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", fmt.Errorf("API Base URL must be a valid HTTP or HTTPS URL")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("API Base URL cannot contain a query or fragment")
+	}
+	return strings.TrimRight(value, "/"), nil
 }
 
 func collectModelNamesFromOptionValue(raw string, modelNames map[string]struct{}) {
@@ -142,10 +154,17 @@ func UpdateOption(c *gin.Context) {
 	}
 	switch option.Key {
 	case "QuotaForInviter", "QuotaForInvitee":
-		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
-			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
+		if option.Value != "0" {
+			common.ApiErrorMsg(c, "旧邀请奖励已永久禁用，只允许保持为 0")
 			return
 		}
+	case "ApiBaseUrl":
+		normalized, normalizeErr := normalizeAPIBaseURL(option.Value.(string))
+		if normalizeErr != nil {
+			common.ApiErrorMsg(c, normalizeErr.Error())
+			return
+		}
+		option.Value = normalized
 	default:
 		if isPaymentComplianceOptionKey(option.Key) {
 			common.ApiErrorMsg(c, "合规确认字段不允许通过通用设置接口修改")

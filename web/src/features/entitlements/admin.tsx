@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
+import { AdminGift } from './components/admin-gift'
 import { AdminOperations } from './components/admin-operations'
 import { AdminPolicyTypes } from './components/admin-policy-types'
 import { AdminProducts } from './components/admin-products'
@@ -29,6 +30,7 @@ export function EntitlementAdmin() {
             <TabsTrigger value='policy'>{t('Policies and Types')}</TabsTrigger>
             <TabsTrigger value='products'>{t('Products and SKUs')}</TabsTrigger>
             <TabsTrigger value='operations'>{t('Operations')}</TabsTrigger>
+            <TabsTrigger value='gift'>{t('Gift and Referrals')}</TabsTrigger>
           </TabsList>
           <TabsContent value='policy' className='pt-4'>
             <AdminPolicyTypes />
@@ -38,6 +40,9 @@ export function EntitlementAdmin() {
           </TabsContent>
           <TabsContent value='operations' className='pt-4'>
             <AdminOperations />
+          </TabsContent>
+          <TabsContent value='gift' className='pt-4'>
+            <AdminGift />
           </TabsContent>
         </Tabs>
       </SectionPageLayout.Content>

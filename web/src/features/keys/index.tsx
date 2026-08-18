@@ -16,10 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
+import { ApiBaseUrlPanel } from './components/api-base-url-panel'
 import { ApiKeysDialogs } from './components/api-keys-dialogs'
 import { ApiKeysPrimaryButtons } from './components/api-keys-primary-buttons'
 import { ApiKeysProvider } from './components/api-keys-provider'
@@ -27,15 +30,33 @@ import { ApiKeysTable } from './components/api-keys-table'
 
 export function ApiKeys() {
   const { t } = useTranslation()
+  const [activeTab, setActiveTab] = useState('keys')
   return (
     <ApiKeysProvider>
       <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>{t('API Keys')}</SectionPageLayout.Title>
-        <SectionPageLayout.Actions>
-          <ApiKeysPrimaryButtons />
-        </SectionPageLayout.Actions>
+        {activeTab === 'keys' && (
+          <SectionPageLayout.Actions>
+            <ApiKeysPrimaryButtons />
+          </SectionPageLayout.Actions>
+        )}
         <SectionPageLayout.Content>
-          <ApiKeysTable />
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className='h-full min-h-0 gap-3'
+          >
+            <TabsList>
+              <TabsTrigger value='keys'>{t('Key management')}</TabsTrigger>
+              <TabsTrigger value='base-url'>Base URL</TabsTrigger>
+            </TabsList>
+            <TabsContent value='keys' className='min-h-0 overflow-hidden'>
+              <ApiKeysTable />
+            </TabsContent>
+            <TabsContent value='base-url' className='min-h-0 overflow-hidden'>
+              <ApiBaseUrlPanel />
+            </TabsContent>
+          </Tabs>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

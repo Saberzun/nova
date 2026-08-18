@@ -16,7 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Activity, BarChart3, WalletCards } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { Activity, BarChart3, ChevronRight, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
@@ -24,6 +26,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { getSelfEntitlements } from '@/features/entitlements/api'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatCompactNumber, formatQuota } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
@@ -42,6 +45,10 @@ interface ProfileHeaderProps {
 
 export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const { t } = useTranslation()
+  const entitlements = useQuery({
+    queryKey: ['entitlements', 'self'],
+    queryFn: getSelfEntitlements,
+  })
 
   if (loading) {
     return (
@@ -84,19 +91,36 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = getUserAvatarStyle(avatarName)
   const roleLabel = getRoleLabel(profile.role)
+  const availableQuota = (entitlements.data?.data?.entitlements ?? []).reduce(
+    (total, entitlement) =>
+      entitlement.state === 'active'
+        ? total +
+          Math.max(
+            0,
+            entitlement.total_quota -
+              entitlement.used_quota -
+              entitlement.reserved_quota
+          )
+        : total,
+    0
+  )
   const stats: {
     label: string
     value: string
     description: string
     icon: typeof WalletCards
     tone: IconBadgeTone
+    href?: '/entitlements'
+    loading?: boolean
   }[] = [
     {
-      label: t('Current Balance'),
-      value: formatQuota(profile.quota),
-      description: t('Remaining quota'),
+      label: t('Available quota'),
+      value: entitlements.isError ? '—' : formatQuota(availableQuota),
+      description: t('My Subscriptions'),
       icon: WalletCards,
       tone: 'success',
+      href: '/entitlements',
+      loading: entitlements.isPending,
     },
     {
       label: t('Total Usage'),
@@ -164,25 +188,52 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
       </CardContent>
       <div className='border-t'>
         <div className='divide-border/60 grid grid-cols-3 divide-x'>
-          {stats.map((item) => (
-            <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
-              <div className='flex items-center gap-2'>
-                <IconBadge tone={item.tone} size='stat'>
-                  <item.icon />
-                </IconBadge>
-                <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
-                  {item.label}
+          {stats.map((item) => {
+            const content = (
+              <>
+                <div className='flex items-center gap-2'>
+                  <IconBadge tone={item.tone} size='stat'>
+                    <item.icon />
+                  </IconBadge>
+                  <div className='text-muted-foreground truncate text-xs font-medium tracking-wider uppercase'>
+                    {item.label}
+                  </div>
                 </div>
-              </div>
 
-              <div className='text-foreground mt-1.5 truncate font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
-                {item.value}
+                {item.loading ? (
+                  <Skeleton className='mt-1.5 h-7 w-28 sm:mt-2' />
+                ) : (
+                  <div className='text-foreground mt-1.5 truncate font-mono text-lg font-bold tracking-tight tabular-nums sm:mt-2 sm:text-2xl'>
+                    {item.value}
+                  </div>
+                )}
+                <div className='text-muted-foreground/60 mt-1 hidden items-center gap-1 text-xs md:flex'>
+                  {item.description}
+                  {item.href ? <ChevronRight className='h-3 w-3' /> : null}
+                </div>
+              </>
+            )
+            const className = `min-w-0 px-3 py-3 sm:px-5 sm:py-4${
+              item.href
+                ? ' hover:bg-muted/50 focus-visible:ring-ring cursor-pointer transition-colors focus-visible:ring-2 focus-visible:outline-none'
+                : ''
+            }`
+
+            return item.href ? (
+              <Link
+                key={item.label}
+                to={item.href}
+                className={className}
+                aria-label={`${item.label} - ${item.description}`}
+              >
+                {content}
+              </Link>
+            ) : (
+              <div key={item.label} className={className}>
+                {content}
               </div>
-              <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
-                {item.description}
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </Card>

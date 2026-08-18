@@ -40,8 +40,7 @@ func AdminUpsertAccessGroupPolicy(c *gin.Context) {
 		return
 	}
 	if request.FundingSourceType != model.EntitlementAssetSubscription &&
-		request.FundingSourceType != model.EntitlementAssetStoredValue &&
-		request.FundingSourceType != model.EntitlementAssetSystemWallet {
+		request.FundingSourceType != model.EntitlementAssetStoredValue {
 		common.ApiErrorMsg(c, "无效的资金来源类型")
 		return
 	}
@@ -467,9 +466,10 @@ func ListStoreProducts(c *gin.Context) {
 }
 
 type createProductOrderRequest struct {
-	SKUId       int   `json:"sku_id"`
-	Quantity    int   `json:"quantity"`
-	AmountMinor int64 `json:"amount_minor"`
+	SKUId             int   `json:"sku_id"`
+	Quantity          int   `json:"quantity"`
+	AmountMinor       int64 `json:"amount_minor"`
+	GiftDiscountCents int64 `json:"gift_discount_cents"`
 }
 
 func CreateStoreOrder(c *gin.Context) {
@@ -481,19 +481,195 @@ func CreateStoreOrder(c *gin.Context) {
 	if request.Quantity == 0 {
 		request.Quantity = 1
 	}
-	order, err := model.CreateProductOrder(c.GetInt("id"), request.SKUId, request.Quantity, request.AmountMinor)
+	order, err := model.CreateProductOrderWithGift(c.GetInt("id"), request.SKUId, request.Quantity, request.AmountMinor, request.GiftDiscountCents)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	if order.TotalAmountMinor == 0 {
-		if err := model.CompleteProductOrder(order.OrderNo, "", "free"); err != nil {
+		paymentMethod := "free"
+		if order.GiftDiscountCents > 0 {
+			paymentMethod = "gift"
+		}
+		if err := model.CompleteProductOrder(order.OrderNo, "", paymentMethod); err != nil {
 			common.ApiError(c, err)
 			return
 		}
 		order.Status = model.ProductOrderStatusFulfilled
 	}
 	common.ApiSuccess(c, order)
+}
+
+func GetGiftSelf(c *gin.Context) {
+	userId := c.GetInt("id")
+	account, err := model.GetGiftAccount(userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	ledger, err := model.ListGiftLedger(userId, 100)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	rewards, err := model.ListReferralRewardsForInviter(userId, 100)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	rewardRows := make([]gin.H, 0, len(rewards))
+	for _, reward := range rewards {
+		friend := "***"
+		var invitee model.User
+		if queryErr := model.DB.Select("username", "email").Where("id = ?", reward.InviteeUserId).Limit(1).Find(&invitee).Error; queryErr == nil {
+			identity := strings.TrimSpace(invitee.Email)
+			if identity == "" {
+				identity = strings.TrimSpace(invitee.Username)
+			}
+			if at := strings.Index(identity, "@"); at > 2 {
+				friend = identity[:2] + "***" + identity[at:]
+			} else if len(identity) > 2 {
+				friend = identity[:2] + "***"
+			}
+		}
+		rewardRows = append(rewardRows, gin.H{
+			"id": reward.Id, "friend": friend, "source_order_no": reward.SourceOrderNo,
+			"source_category": reward.SourceCategory, "reward_tier": reward.RewardTier,
+			"cash_paid_cents": reward.CashPaidCents, "reward_rate_bps": reward.RewardRateBps,
+			"reward_cents": reward.RewardCents, "status": reward.Status,
+			"release_at": reward.ReleaseAt, "created_at": reward.CreatedAt,
+		})
+	}
+	settings, err := model.GetGiftSettings()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var user model.User
+	if err := model.DB.Select("id", "aff_code", "aff_count").Where("id = ?", userId).First(&user).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var pendingCents int64
+	var totalCents int64
+	_ = model.DB.Model(&model.ReferralRewardEvent{}).
+		Where("inviter_user_id = ? AND status = ?", userId, model.ReferralRewardPending).
+		Select("COALESCE(SUM(reward_cents), 0)").Scan(&pendingCents).Error
+	_ = model.DB.Model(&model.ReferralRewardEvent{}).
+		Where("inviter_user_id = ? AND status IN ?", userId, []string{model.ReferralRewardReleased, model.ReferralRewardPending}).
+		Select("COALESCE(SUM(reward_cents), 0)").Scan(&totalCents).Error
+	common.ApiSuccess(c, gin.H{
+		"account": account, "ledger": ledger, "rewards": rewardRows, "settings": settings,
+		"aff_code": user.AffCode, "aff_count": user.AffCount,
+		"pending_cents": pendingCents, "total_reward_cents": totalCents,
+	})
+}
+
+func AdminGetGiftSettings(c *gin.Context) {
+	settings, err := model.GetGiftSettings()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, settings)
+}
+
+func AdminSaveGiftSettings(c *gin.Context) {
+	var settings model.GiftSettings
+	if err := c.ShouldBindJSON(&settings); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.SaveGiftSettings(&settings); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "gift.settings_update", map[string]interface{}{
+		"checkout_enabled": settings.CheckoutEnabled, "referral_enabled": settings.ReferralEnabled,
+		"first_rate_bps": settings.FirstRateBps, "recurring_rate_bps": settings.RecurringRateBps,
+	})
+	common.ApiSuccess(c, nil)
+}
+
+type adminGiftAdjustmentRequest struct {
+	DeltaCents     int64  `json:"delta_cents"`
+	Reason         string `json:"reason"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func AdminAdjustGift(c *gin.Context) {
+	userId, _ := strconv.Atoi(c.Param("id"))
+	var request adminGiftAdjustmentRequest
+	if userId <= 0 || c.ShouldBindJSON(&request) != nil || request.DeltaCents == 0 ||
+		strings.TrimSpace(request.Reason) == "" || strings.TrimSpace(request.IdempotencyKey) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if err := model.AdminAdjustGift(userId, c.GetInt("id"), request.DeltaCents, request.Reason, request.IdempotencyKey); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAuditFor(c, userId, "gift.adjust", map[string]interface{}{
+		"delta_cents": request.DeltaCents, "reason": request.Reason,
+	})
+	common.ApiSuccess(c, nil)
+}
+
+func AdminGetUserGift(c *gin.Context) {
+	userId, _ := strconv.Atoi(c.Param("id"))
+	if userId <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	account, err := model.GetGiftAccount(userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	ledger, err := model.ListGiftLedger(userId, 200)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"account": account, "ledger": ledger})
+}
+
+func AdminReleaseReferralRewards(c *gin.Context) {
+	count, err := model.ReleaseDueReferralRewards(500)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "gift.referral_release", map[string]interface{}{"count": count})
+	common.ApiSuccess(c, gin.H{"released": count})
+}
+
+func AdminAuditGiftAccounting(c *gin.Context) {
+	report, err := model.AuditGiftAccounting()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, report)
+}
+
+type freezeLegacyQuotaRequest struct {
+	BatchNo string `json:"batch_no"`
+}
+
+func AdminFreezeLegacyQuota(c *gin.Context) {
+	var request freezeLegacyQuotaRequest
+	if c.ShouldBindJSON(&request) != nil || strings.TrimSpace(request.BatchNo) == "" {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	count, err := model.FreezeLegacyQuota(request.BatchNo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "gift.legacy_quota_freeze", map[string]interface{}{"batch_no": request.BatchNo, "count": count})
+	common.ApiSuccess(c, gin.H{"created": count})
 }
 
 func ListStoreOrders(c *gin.Context) {

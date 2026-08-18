@@ -34,11 +34,7 @@ import { AdminFormField } from './admin-form-field'
 
 const policySchema = z.object({
   group_name: z.string().trim().min(1),
-  funding_source_type: z.enum([
-    'subscription',
-    'stored_value',
-    'system_wallet',
-  ]),
+  funding_source_type: z.enum(['subscription', 'stored_value']),
 })
 
 const typeSchema = z.object({
@@ -180,9 +176,6 @@ export function AdminPolicyTypes() {
                 </NativeSelectOption>
                 <NativeSelectOption value='stored_value'>
                   {t('Recharge quota')}
-                </NativeSelectOption>
-                <NativeSelectOption value='system_wallet'>
-                  {t('System wallet')}
                 </NativeSelectOption>
               </NativeSelect>
             </AdminFormField>

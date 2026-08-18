@@ -69,4 +69,14 @@ func runEntitlementLifecycleOnce() {
 			break
 		}
 	}
+	for {
+		count, err := model.ReleaseDueReferralRewards(entitlementLifecycleBatchSize)
+		if err != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("referral reward release failed: %v", err))
+			return
+		}
+		if count < entitlementLifecycleBatchSize {
+			break
+		}
+	}
 }

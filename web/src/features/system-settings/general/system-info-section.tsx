@@ -48,6 +48,7 @@ import { useUpdateOption } from '../hooks/use-update-option'
 const _systemInfoSchema = z.object({
   SystemName: z.string().min(1),
   ServerAddress: z.string().optional(),
+  ApiBaseUrl: z.url(),
   Logo: z.string().url().optional().or(z.literal('')),
   Footer: z.string().optional(),
   About: z.string().optional(),
@@ -76,6 +77,8 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
   const normalizedDefaults: SystemInfoFormValues = {
     SystemName: normalizeValue(defaultValues.SystemName),
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
+    ApiBaseUrl:
+      normalizeValue(defaultValues.ApiBaseUrl) || 'https://api.itokenify.com',
     Logo: normalizeValue(defaultValues.Logo),
     Footer: normalizeValue(defaultValues.Footer),
     About: normalizeValue(defaultValues.About),
@@ -91,6 +94,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
       error: () => t('System name is required'),
     }),
     ServerAddress: z.string().optional(),
+    ApiBaseUrl: z
+      .url({ error: () => t('Please enter a valid HTTP or HTTPS URL') })
+      .refine((value) => /^https?:\/\//i.test(value), {
+        error: () => t('Please enter a valid HTTP or HTTPS URL'),
+      }),
     Logo: z.string().url().optional().or(z.literal('')),
     Footer: z.string().optional(),
     About: z.string().optional(),
@@ -112,7 +120,7 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
       onSubmit: async (_data, changedFields) => {
         for (const [key, value] of Object.entries(changedFields)) {
           let v = normalizeValue(value)
-          if (key === 'ServerAddress') {
+          if (key === 'ServerAddress' || key === 'ApiBaseUrl') {
             v = v.replace(/\/+$/, '')
           }
           await updateOption.mutateAsync({
@@ -167,6 +175,25 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                     <FormDescription>
                       {t(
                         'The public URL of your server, used for OAuth callbacks, webhooks, and other external integrations'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='ApiBaseUrl'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('API Base URL')}</FormLabel>
+                    <FormControl>
+                      <Input placeholder='https://api.example.com' {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'The API endpoint displayed to users on the API Keys page; do not include /v1'
                       )}
                     </FormDescription>
                     <FormMessage />

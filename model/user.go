@@ -9,7 +9,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -495,46 +494,47 @@ func inviteUser(inviterId int) (err error) {
 		return err
 	}
 	user.AffCount++
-	user.AffQuota += common.QuotaForInviter
-	user.AffHistoryQuota += common.QuotaForInviter
 	return DB.Save(user).Error
 }
 
 func (user *User) TransferAffQuotaToQuota(quota int) error {
-	// 检查quota是否小于最小额度
-	if float64(quota) < common.NanoUSDPerUSD {
-		return fmt.Errorf("转移额度最小为%s！", logger.LogQuota(int(common.NanoUSDPerUSD)))
-	}
+	return errors.New("历史邀请额度与用户余额已封存")
+	/*
+		// 检查quota是否小于最小额度
+		if float64(quota) < common.NanoUSDPerUSD {
+			return fmt.Errorf("转移额度最小为%s！", logger.LogQuota(int(common.NanoUSDPerUSD)))
+		}
 
-	// 开始数据库事务
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return tx.Error
-	}
-	defer tx.Rollback() // 确保在函数退出时事务能回滚
+		// 开始数据库事务
+		tx := DB.Begin()
+		if tx.Error != nil {
+			return tx.Error
+		}
+		defer tx.Rollback() // 确保在函数退出时事务能回滚
 
-	// 加锁查询用户以确保数据一致性
-	err := lockForUpdate(tx).First(&user, user.Id).Error
-	if err != nil {
-		return err
-	}
+		// 加锁查询用户以确保数据一致性
+		err := lockForUpdate(tx).First(&user, user.Id).Error
+		if err != nil {
+			return err
+		}
 
-	// 再次检查用户的AffQuota是否足够
-	if user.AffQuota < quota {
-		return errors.New("邀请额度不足！")
-	}
+		// 再次检查用户的AffQuota是否足够
+		if user.AffQuota < quota {
+			return errors.New("邀请额度不足！")
+		}
 
-	// 更新用户额度
-	user.AffQuota -= quota
-	user.Quota += quota
+		// 更新用户额度
+		user.AffQuota -= quota
+		user.Quota += quota
 
-	// 保存用户状态
-	if err := tx.Save(user).Error; err != nil {
-		return err
-	}
+		// 保存用户状态
+		if err := tx.Save(user).Error; err != nil {
+			return err
+		}
 
-	// 提交事务
-	return tx.Commit().Error
+		// 提交事务
+		return tx.Commit().Error
+	*/
 }
 
 func (user *User) prepareForInsert(tx *gorm.DB) error {
@@ -594,7 +594,7 @@ func (user *User) Insert(inviterId int) error {
 			if err := user.prepareForInsert(tx); err != nil {
 				return err
 			}
-			user.Quota = common.QuotaForNewUser
+			user.Quota = 0
 			user.AffCode = common.GetRandomString(4)
 
 			// 初始化用户设置，包括默认的边栏配置
@@ -630,19 +630,8 @@ func (user *User) finishInsert(inviterId int) {
 		}
 	}
 
-	if common.QuotaForNewUser > 0 {
-		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
-	}
 	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
-		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
-		}
-		if common.QuotaForInviter > 0 {
-			//_ = IncreaseUserQuota(inviterId, common.QuotaForInviter)
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
-		}
+		_ = inviteUser(inviterId)
 	}
 }
 
@@ -658,7 +647,7 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 		if err := user.prepareForInsert(tx); err != nil {
 			return err
 		}
-		user.Quota = common.QuotaForNewUser
+		user.Quota = 0
 		user.AffCode = common.GetRandomString(4)
 
 		// 初始化用户设置
@@ -687,18 +676,8 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		}
 	}
 
-	if common.QuotaForNewUser > 0 {
-		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
-	}
 	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
-		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
-		}
-		if common.QuotaForInviter > 0 {
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", logger.LogQuota(common.QuotaForInviter)))
-			_ = inviteUser(inviterId)
-		}
+		_ = inviteUser(inviterId)
 	}
 }
 
@@ -1230,6 +1209,9 @@ func GetUserSetting(id int, fromDB bool) (settingMap dto.UserSetting, err error)
 }
 
 func IncreaseUserQuota(id int, quota int, db bool) (err error) {
+	if common.LegacyQuotaFrozen {
+		return errors.New("legacy user quota is frozen")
+	}
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
@@ -1255,6 +1237,9 @@ func increaseUserQuota(id int, quota int) (err error) {
 }
 
 func DecreaseUserQuota(id int, quota int, db bool) (err error) {
+	if common.LegacyQuotaFrozen {
+		return errors.New("legacy user quota is frozen")
+	}
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}

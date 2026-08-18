@@ -33,8 +33,8 @@ import {
   Ticket,
   User,
   Users,
-  Wallet,
   ShoppingBag,
+  Share2,
   ShieldCheck,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -117,9 +117,9 @@ export function useSidebarData(): SidebarData {
             icon: ShieldCheck,
           },
           {
-            title: t('Wallet'),
-            url: '/wallet',
-            icon: Wallet,
+            title: t('Friend Referral'),
+            url: '/referral',
+            icon: Share2,
           },
           {
             title: t('Profile'),

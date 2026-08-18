@@ -120,9 +120,7 @@ export function parseDirectPriceExpression(expression?: string): {
   prices: Record<LaneKey, string>
   enabled: Record<LaneKey, boolean>
 } | null {
-  const match = expression
-    ?.trim()
-    .match(/^tier\("direct-price",\s*(.+)\)$/)
+  const match = expression?.trim().match(/^tier\("direct-price",\s*(.+)\)$/)
   if (!match) return null
 
   const coefficients = new Map<string, string>()

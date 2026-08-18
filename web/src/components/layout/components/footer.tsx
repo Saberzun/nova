@@ -182,7 +182,43 @@ export function Footer(props: FooterProps) {
     [t]
   )
 
-  const displayColumns = props.columns ?? fallbackColumns
+  const itokenifyColumns = useMemo<FooterColumnProps[]>(
+    () => [
+      {
+        title: t('Product'),
+        links: [
+          { text: t('Developer documentation'), href: '/docs' },
+          { text: t('Model Square'), href: '/pricing' },
+          { text: t('Quota store'), href: '/store' },
+        ],
+      },
+      {
+        title: t('Company'),
+        links: [
+          { text: t('About'), href: '/about' },
+          { text: t('Business cooperation'), href: '/business' },
+          { text: t('Contact information'), href: '/business' },
+        ],
+      },
+      {
+        title: t('Legal'),
+        links: [
+          { text: t('Commercial service terms'), href: '/legal/terms' },
+          { text: t('Acceptable use policy'), href: '/legal/acceptable-use' },
+          { text: t('Supported regions'), href: '/legal/supported-regions' },
+          { text: t('Data Processing Addendum'), href: '/dpa' },
+          {
+            text: t('Service-specific terms'),
+            href: '/legal/service-specific',
+          },
+        ],
+      },
+    ],
+    [t]
+  )
+
+  const displayColumns =
+    props.columns ?? (isDemoSiteMode ? fallbackColumns : itokenifyColumns)
 
   if (footerHtml) {
     return (
@@ -234,24 +270,22 @@ export function Footer(props: FooterProps) {
           </div>
 
           {/* Links columns */}
-          {isDemoSiteMode && (
-            <div className='grid grid-cols-3 gap-8 md:gap-16'>
-              {displayColumns.map((column) => (
-                <div key={column.title}>
-                  <p className='text-muted-foreground/50 mb-3 text-xs font-medium tracking-wider uppercase'>
-                    {t(column.title)}
-                  </p>
-                  <ul className='space-y-2.5'>
-                    {column.links.map((link) => (
-                      <li key={`${link.href}-${link.text}`}>
-                        <FooterLinkItem link={link} />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className='grid grid-cols-2 gap-8 sm:grid-cols-3 md:gap-14'>
+            {displayColumns.map((column) => (
+              <div key={column.title}>
+                <p className='text-muted-foreground/50 mb-3 text-xs font-medium uppercase'>
+                  {t(column.title)}
+                </p>
+                <ul className='space-y-2.5'>
+                  {column.links.map((link) => (
+                    <li key={`${link.href}-${link.text}`}>
+                      <FooterLinkItem link={link} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Copyright and optional legal links. */}

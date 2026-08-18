@@ -64,7 +64,7 @@ func StoreOrderRequestEpay(c *gin.Context) {
 		common.ApiErrorMsg(c, "回调地址配置错误")
 		return
 	}
-	money := decimal.NewFromInt(order.TotalAmountMinor).Div(decimal.NewFromInt(100)).StringFixed(2)
+	money := decimal.NewFromInt(order.PayableCashCents()).Div(decimal.NewFromInt(100)).StringFixed(2)
 	uri, params, err := client.Purchase(&epay.PurchaseArgs{
 		Type:           request.PaymentMethod,
 		ServiceTradeNo: order.OrderNo,
@@ -112,12 +112,15 @@ func completeStoreEpay(c *gin.Context) (bool, string) {
 		return false, ""
 	}
 	var order model.ProductOrder
-	if err := model.DB.Where("order_no = ?", verifyInfo.ServiceTradeNo).First(&order).Error; err != nil ||
-		!storeOrderAmountMatches(order.TotalAmountMinor, verifyInfo.Money) {
+	if err := model.DB.Where("order_no = ?", verifyInfo.ServiceTradeNo).First(&order).Error; err != nil {
 		return false, verifyInfo.ServiceTradeNo
 	}
 	payload, err := common.Marshal(verifyInfo)
 	if err != nil {
+		return false, verifyInfo.ServiceTradeNo
+	}
+	if !storeOrderAmountMatches(order.PayableCashCents(), verifyInfo.Money) {
+		_ = model.MarkProductOrderPaymentException(verifyInfo.ServiceTradeNo, "payment amount mismatch", string(payload))
 		return false, verifyInfo.ServiceTradeNo
 	}
 	LockOrder(verifyInfo.ServiceTradeNo)
@@ -129,6 +132,9 @@ func completeStoreEpay(c *gin.Context) (bool, string) {
 		verifyInfo.Type,
 		string(payload),
 	)
+	if err != nil {
+		_ = model.MarkProductOrderPaymentException(verifyInfo.ServiceTradeNo, err.Error(), string(payload))
+	}
 	return err == nil, verifyInfo.ServiceTradeNo
 }
 

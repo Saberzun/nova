@@ -44,13 +44,7 @@ func resolveGroupSelectionState(
 		}
 		return false, groupUnavailableQuota
 	case model.EntitlementAssetSystemWallet:
-		if !inUserUsableGroups {
-			return false, groupUnavailablePermission
-		}
-		if userQuota <= 0 {
-			return false, groupUnavailableQuota
-		}
-		return true, ""
+		return false, "历史钱包余额已封存"
 	default:
 		return false, groupUnavailableFundingSource
 	}

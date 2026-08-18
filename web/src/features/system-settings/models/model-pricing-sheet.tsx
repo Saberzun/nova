@@ -392,10 +392,7 @@ export const ModelPricingEditorPanel = forwardRef<
       )
     }
 
-    if (
-      pricingMode === 'per-token' &&
-      toNumberOrNull(promptPrice) === null
-    ) {
+    if (pricingMode === 'per-token' && toNumberOrNull(promptPrice) === null) {
       nextWarnings.push(
         t('Input price is required before saving dependent prices.')
       )

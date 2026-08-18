@@ -95,8 +95,15 @@ func ReplaceEntitlementTypeGroups(typeId int, groupNames []string, operatorId in
 }
 
 func CreateProductOrder(userId int, skuId int, quantity int, rechargeAmountMinor int64) (*ProductOrder, error) {
+	return CreateProductOrderWithGift(userId, skuId, quantity, rechargeAmountMinor, 0)
+}
+
+func CreateProductOrderWithGift(userId int, skuId int, quantity int, rechargeAmountMinor int64, giftDiscountCents int64) (*ProductOrder, error) {
 	if userId <= 0 || skuId <= 0 || quantity <= 0 || quantity > 100 {
 		return nil, errors.New("invalid product order")
+	}
+	if giftDiscountCents < 0 {
+		return nil, errors.New("gift discount cannot be negative")
 	}
 	var created ProductOrder
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -184,14 +191,32 @@ func CreateProductOrder(userId int, skuId int, quantity int, rechargeAmountMinor
 				return errors.New("sku purchase limit exceeded")
 			}
 		}
+		originalAmount := unitPriceAmountMinor * int64(quantity)
+		if giftDiscountCents > originalAmount {
+			return errors.New("gift discount exceeds product amount")
+		}
+		if giftDiscountCents > 0 {
+			var giftSettings GiftSettings
+			settingsResult := tx.Order("id asc").Limit(1).Find(&giftSettings)
+			if settingsResult.Error != nil {
+				return settingsResult.Error
+			}
+			if settingsResult.RowsAffected == 0 || !giftSettings.CheckoutEnabled {
+				return errors.New("gift checkout is disabled")
+			}
+		}
+		cashPayable := originalAmount - giftDiscountCents
 		orderNo := fmt.Sprintf("PO-%d-%s", common.GetTimestamp(), common.GetRandomString(10))
 		order := ProductOrder{
-			OrderNo:          orderNo,
-			UserId:           userId,
-			Status:           ProductOrderStatusPending,
-			TotalAmountMinor: unitPriceAmountMinor * int64(quantity),
-			Currency:         sku.Currency,
-			ExpiresAt:        getDBTimestampTx(tx) + ProductOrderPaymentTimeout,
+			OrderNo:             orderNo,
+			UserId:              userId,
+			Status:              ProductOrderStatusPending,
+			TotalAmountMinor:    cashPayable,
+			OriginalAmountCents: originalAmount,
+			GiftDiscountCents:   giftDiscountCents,
+			CashPayableCents:    cashPayable,
+			Currency:            sku.Currency,
+			ExpiresAt:           getDBTimestampTx(tx) + ProductOrderPaymentTimeout,
 		}
 		if err := tx.Create(&order).Error; err != nil {
 			return err
@@ -214,6 +239,15 @@ func CreateProductOrder(userId int, skuId int, quantity int, rechargeAmountMinor
 		}
 		if err := tx.Create(&item).Error; err != nil {
 			return err
+		}
+		if giftDiscountCents > 0 {
+			if err := reserveGiftTx(tx, userId, order.Id, giftDiscountCents, order.ExpiresAt); err != nil {
+				return err
+			}
+			order.GiftStatus = GiftHoldStatusReserved
+			if err := tx.Model(&order).Update("gift_status", GiftHoldStatusReserved).Error; err != nil {
+				return err
+			}
 		}
 		if sku.StockLimited {
 			result := tx.Model(&ProductSKU{}).Where("id = ? AND stock >= ?", sku.Id, quantity).
@@ -263,7 +297,7 @@ func PrepareProductOrderPayment(orderNo string, userId int, paymentProvider stri
 			expired = true
 			return nil
 		}
-		if order.TotalAmountMinor <= 0 {
+		if order.CashPayableCents <= 0 && order.TotalAmountMinor <= 0 {
 			return errors.New("free order does not require payment")
 		}
 		if order.PaymentProvider != "" && order.PaymentProvider != paymentProvider {
@@ -314,6 +348,36 @@ func ResetProductOrderPaymentPreparation(orderNo string, userId int, paymentProv
 	return nil
 }
 
+func MarkProductOrderPaymentException(orderNo string, reason string, providerPayload string) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var order ProductOrder
+		result := lockForUpdate(tx).Where("order_no = ?", orderNo).Limit(1).Find(&order)
+		if result.Error != nil || result.RowsAffected == 0 {
+			return result.Error
+		}
+		if order.Status != ProductOrderStatusPending && order.Status != ProductOrderStatusCancelled {
+			return nil
+		}
+		if order.Status == ProductOrderStatusPending {
+			if err := releaseGiftTx(tx, &order, "payment exception"); err != nil {
+				return err
+			}
+		}
+		updates := map[string]interface{}{
+			"status":        ProductOrderStatusPaymentException,
+			"status_reason": strings.TrimSpace(reason),
+			"updated_at":    common.GetTimestamp(),
+		}
+		if order.GiftDiscountCents > 0 {
+			updates["gift_status"] = GiftHoldStatusReleased
+		}
+		if strings.TrimSpace(providerPayload) != "" {
+			updates["provider_payload"] = providerPayload
+		}
+		return tx.Model(&order).Updates(updates).Error
+	})
+}
+
 func CompleteProductOrderWithProvider(orderNo string, providerTradeNo string, expectedPaymentProvider string, paymentMethod string, providerPayload string) error {
 	orderNo = strings.TrimSpace(orderNo)
 	if orderNo == "" {
@@ -334,6 +398,16 @@ func CompleteProductOrderWithProvider(orderNo string, providerTradeNo string, ex
 			return fmt.Errorf("order cannot be fulfilled from status %s", order.Status)
 		}
 		now := getDBTimestampTx(tx)
+		if order.OriginalAmountCents == 0 {
+			order.OriginalAmountCents = order.TotalAmountMinor + order.GiftDiscountCents
+		}
+		if order.CashPayableCents == 0 && order.TotalAmountMinor > 0 {
+			order.CashPayableCents = order.TotalAmountMinor
+		}
+		if err := captureGiftTx(tx, &order); err != nil {
+			return err
+		}
+		order.CashPaidCents = order.CashPayableCents
 		batchId := fmt.Sprintf("FUL-%d-%s", order.Id, common.GetRandomString(8))
 		for _, item := range order.Items {
 			var entitlementType EntitlementType
@@ -402,11 +476,17 @@ func CompleteProductOrderWithProvider(orderNo string, providerTradeNo string, ex
 		}
 		tradeNo := strings.TrimSpace(providerTradeNo)
 		updates := map[string]interface{}{
-			"status":         ProductOrderStatusFulfilled,
-			"payment_method": strings.TrimSpace(paymentMethod),
-			"paid_at":        now,
-			"fulfilled_at":   now,
-			"updated_at":     common.GetTimestamp(),
+			"status":                ProductOrderStatusFulfilled,
+			"payment_method":        strings.TrimSpace(paymentMethod),
+			"original_amount_cents": order.OriginalAmountCents,
+			"cash_payable_cents":    order.CashPayableCents,
+			"cash_paid_cents":       order.CashPaidCents,
+			"paid_at":               now,
+			"fulfilled_at":          now,
+			"updated_at":            common.GetTimestamp(),
+		}
+		if order.GiftDiscountCents > 0 {
+			updates["gift_status"] = GiftHoldStatusCaptured
 		}
 		if expectedPaymentProvider != "" {
 			updates["payment_provider"] = expectedPaymentProvider
@@ -417,7 +497,11 @@ func CompleteProductOrderWithProvider(orderNo string, providerTradeNo string, ex
 		if tradeNo != "" {
 			updates["provider_trade_no"] = tradeNo
 		}
-		return tx.Model(&order).Updates(updates).Error
+		if err := tx.Model(&order).Updates(updates).Error; err != nil {
+			return err
+		}
+		order.PaymentMethod = strings.TrimSpace(paymentMethod)
+		return createReferralRewardTx(tx, &order, now)
 	})
 	if err != nil {
 		return err
@@ -460,17 +544,24 @@ func cancelProductOrderTx(tx *gorm.DB, order *ProductOrder, reason string) error
 	if order.PaymentProvider != "" {
 		return errors.New("order payment was initiated and must be reconciled before cancellation")
 	}
+	if err := releaseGiftTx(tx, order, reason); err != nil {
+		return err
+	}
 	if err := restoreProductOrderStockTx(tx, order); err != nil {
 		return err
 	}
 	now := getDBTimestampTx(tx)
-	return tx.Model(order).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"status":         ProductOrderStatusCancelled,
 		"status_reason":  strings.TrimSpace(reason),
 		"cancelled_at":   now,
 		"stock_restored": order.StockRestored,
 		"updated_at":     common.GetTimestamp(),
-	}).Error
+	}
+	if order.GiftDiscountCents > 0 {
+		updates["gift_status"] = GiftHoldStatusReleased
+	}
+	return tx.Model(order).Updates(updates).Error
 }
 
 func CancelProductOrder(orderNo string, userId int, reason string) error {
@@ -521,18 +612,28 @@ func RefundProductOrder(orderNo string, operatorId int, reason string) error {
 			Update("state", EntitlementStateCancelled).Error; err != nil {
 			return err
 		}
+		if err := refundGiftTx(tx, &order, reason); err != nil {
+			return err
+		}
+		if err := reverseReferralRewardTx(tx, &order, reason); err != nil {
+			return err
+		}
 		if err := restoreProductOrderStockTx(tx, &order); err != nil {
 			return err
 		}
 		now := getDBTimestampTx(tx)
-		return tx.Model(&order).Updates(map[string]interface{}{
+		updates := map[string]interface{}{
 			"status":             ProductOrderStatusRefunded,
 			"status_reason":      reason,
 			"refunded_at":        now,
 			"refund_operator_id": operatorId,
 			"stock_restored":     order.StockRestored,
 			"updated_at":         common.GetTimestamp(),
-		}).Error
+		}
+		if order.GiftDiscountCents > 0 {
+			updates["gift_status"] = GiftHoldStatusRefunded
+		}
+		return tx.Model(&order).Updates(updates).Error
 	})
 }
 

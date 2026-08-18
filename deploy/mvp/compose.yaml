@@ -19,6 +19,7 @@ services:
       TZ: Asia/Shanghai
       ERROR_LOG_ENABLED: 'true'
       BATCH_UPDATE_ENABLED: 'true'
+      LEGACY_QUOTA_FROZEN: 'true'
       NODE_NAME: itokenify-mvp
     volumes:
       - ./data:/data

@@ -453,7 +453,11 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		case model.EntitlementAssetSubscription, model.EntitlementAssetStoredValue:
 			return tryEntitlement(assetKind)
 		case model.EntitlementAssetSystemWallet:
-			return tryWallet()
+			return nil, types.NewError(
+				fmt.Errorf("legacy system wallet is frozen"),
+				types.ErrorCodeInvalidRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
 		default:
 			return nil, types.NewError(
 				fmt.Errorf("unsupported group funding source: %s", assetKind),

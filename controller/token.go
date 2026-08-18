@@ -366,20 +366,8 @@ func validateTokenEntitlementGroup(c *gin.Context, userId int, groupValue string
 			continue
 		}
 		if fundingType == model.EntitlementAssetSystemWallet {
-			if _, ok := userUsableGroups[groupName]; !ok {
-				common.ApiErrorMsg(c, fmt.Sprintf("无权使用 %s 分组", groupName))
-				return false
-			}
-			userQuota, quotaErr := model.GetUserQuota(userId, false)
-			if quotaErr != nil {
-				common.ApiError(c, quotaErr)
-				return false
-			}
-			if userQuota <= 0 {
-				common.ApiErrorMsg(c, fmt.Sprintf("%s 分组暂无可消费额度", groupName))
-				return false
-			}
-			continue
+			common.ApiErrorMsg(c, fmt.Sprintf("%s 分组使用的历史钱包余额已封存", groupName))
+			return false
 		}
 		allowed, entitlementErr := model.UserCanUseEntitlementGroup(userId, groupName)
 		if entitlementErr != nil {

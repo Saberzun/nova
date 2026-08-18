@@ -58,8 +58,7 @@ export function StoreRechargeCard(props: StoreRechargeCardProps) {
   const estimatedQuota = amountIsInRange
     ? calculateRechargeQuota(props.sku, amountMinor)
     : 0
-  const amountIsValid =
-    amountIsInRange && isRechargeQuotaValid(estimatedQuota)
+  const amountIsValid = amountIsInRange && isRechargeQuotaValid(estimatedQuota)
   const soldOut = !isSKUAvailable(props.sku)
   let actionLabel = t('Recharge now')
   if (props.loading) actionLabel = t('Processing')
