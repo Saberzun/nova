@@ -93,10 +93,27 @@ func isWaffoPancakeWebhookEnabled() bool {
 }
 
 func isEpayTopUpEnabled() bool {
+	return len(getEpayMissingConfiguration()) == 0
+}
+
+func getEpayMissingConfiguration() []string {
+	missing := make([]string, 0, 5)
 	if !isPaymentComplianceConfirmed() {
-		return false
+		missing = append(missing, "payment_compliance")
 	}
-	return isEpayWebhookConfigured() && len(operation_setting.PayMethods) > 0
+	if strings.TrimSpace(operation_setting.PayAddress) == "" {
+		missing = append(missing, "gateway_address")
+	}
+	if strings.TrimSpace(operation_setting.EpayId) == "" {
+		missing = append(missing, "merchant_id")
+	}
+	if strings.TrimSpace(operation_setting.EpayKey) == "" {
+		missing = append(missing, "merchant_key")
+	}
+	if len(operation_setting.PayMethods) == 0 {
+		missing = append(missing, "payment_methods")
+	}
+	return missing
 }
 
 func isEpayWebhookConfigured() bool {

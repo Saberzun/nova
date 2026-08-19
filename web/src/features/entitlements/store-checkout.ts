@@ -10,32 +10,25 @@ License, or (at your option) any later version.
 export interface StoreCheckoutSummary {
   giftDiscountCents: number
   cashPayableCents: number
-  giftAmountValid: boolean
   canConfirm: boolean
 }
 
+export type StorePaymentChannel = 'online' | 'corporate_transfer'
+
 export function buildStoreCheckout(
   orderAmountCents: number,
-  requestedGiftYuan: string,
+  useGift: boolean,
   availableGiftCents: number,
-  paymentMethod: string
+  paymentChannelReady: boolean
 ): StoreCheckoutSummary {
-  const requestedGiftCents = Math.round(Number(requestedGiftYuan || '0') * 100)
-  const giftAmountValid =
-    Number.isFinite(requestedGiftCents) && requestedGiftCents >= 0
-  const validRequestedGiftCents = giftAmountValid ? requestedGiftCents : 0
-  const giftDiscountCents = Math.min(
-    validRequestedGiftCents,
-    Math.max(0, availableGiftCents),
-    Math.max(0, orderAmountCents)
-  )
+  const giftDiscountCents = useGift
+    ? Math.min(Math.max(0, availableGiftCents), Math.max(0, orderAmountCents))
+    : 0
   const cashPayableCents = Math.max(0, orderAmountCents - giftDiscountCents)
 
   return {
     giftDiscountCents,
     cashPayableCents,
-    giftAmountValid,
-    canConfirm:
-      giftAmountValid && (cashPayableCents === 0 || paymentMethod !== ''),
+    canConfirm: cashPayableCents === 0 || paymentChannelReady,
   }
 }

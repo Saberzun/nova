@@ -222,8 +222,16 @@ export interface PaymentMethod {
 
 export interface TopupInfo {
   enable_online_topup: boolean
+  epay_missing_configuration: EpayMissingConfiguration[]
   pay_methods: PaymentMethod[]
 }
+
+export type EpayMissingConfiguration =
+  | 'payment_compliance'
+  | 'gateway_address'
+  | 'merchant_id'
+  | 'merchant_key'
+  | 'payment_methods'
 
 export interface CorporateTransferAvailability {
   available: boolean

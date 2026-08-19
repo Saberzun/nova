@@ -167,3 +167,43 @@ func TestEpayWebhookEnabledRequiresTopUpAndWebhookConfig(t *testing.T) {
 	operation_setting.PayMethods = nil
 	require.False(t, isEpayWebhookEnabled())
 }
+
+func TestEpayMissingConfigurationReportsEveryRequiredSetting(t *testing.T) {
+	paymentSetting := operation_setting.GetPaymentSetting()
+	originalConfirmed := paymentSetting.ComplianceConfirmed
+	originalTermsVersion := paymentSetting.ComplianceTermsVersion
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	t.Cleanup(func() {
+		paymentSetting.ComplianceConfirmed = originalConfirmed
+		paymentSetting.ComplianceTermsVersion = originalTermsVersion
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+	})
+
+	paymentSetting.ComplianceConfirmed = false
+	paymentSetting.ComplianceTermsVersion = ""
+	operation_setting.PayAddress = ""
+	operation_setting.EpayId = ""
+	operation_setting.EpayKey = ""
+	operation_setting.PayMethods = nil
+
+	require.Equal(t, []string{
+		"payment_compliance",
+		"gateway_address",
+		"merchant_id",
+		"merchant_key",
+		"payment_methods",
+	}, getEpayMissingConfiguration())
+
+	confirmPaymentComplianceForTest(t)
+	operation_setting.PayAddress = "https://pay.example.com"
+	operation_setting.EpayId = "merchant"
+	operation_setting.EpayKey = "secret"
+	operation_setting.PayMethods = []map[string]string{{"type": "alipay"}}
+	require.Empty(t, getEpayMissingConfiguration())
+}

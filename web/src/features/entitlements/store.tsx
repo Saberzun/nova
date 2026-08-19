@@ -17,8 +17,6 @@ import { toast } from 'sonner'
 import { SectionPageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 
 import {
   cancelStoreOrder,
@@ -40,8 +38,7 @@ import { StoreSubscriptionComparison } from './components/store-subscription-com
 import { corporateTransferStatusKey } from './corporate-transfer-status'
 import { formatDate, submitEpayForm } from './lib'
 import { buildStoreCatalog } from './store-catalog'
-import { buildStoreCheckout } from './store-checkout'
-import { buildStorePaymentMethods } from './store-payment-methods'
+import { buildStoreCheckout, type StorePaymentChannel } from './store-checkout'
 import type { ProductOrder, ProductSKU } from './types'
 
 interface EntitlementStoreProps {
@@ -70,8 +67,10 @@ export function EntitlementStore(props: EntitlementStoreProps) {
   const navigate = useNavigate()
   const [pendingPurchase, setPendingPurchase] =
     useState<PendingPurchase | null>(null)
-  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState('')
-  const [giftAmountYuan, setGiftAmountYuan] = useState('0.00')
+  const [paymentChannel, setPaymentChannel] =
+    useState<StorePaymentChannel>('online')
+  const [onlinePaymentMethod, setOnlinePaymentMethod] = useState('')
+  const [useGift, setUseGift] = useState(false)
   const [noticeOpen, setNoticeOpen] = useState(false)
   const autoOpenedRevision = useRef<number | null>(null)
   const products = useQuery({
@@ -104,20 +103,27 @@ export function EntitlementStore(props: EntitlementStoreProps) {
     [products.data?.data]
   )
 
-  const availableMethods = buildStorePaymentMethods(
-    payment.data?.data?.pay_methods ?? [],
-    corporateTransferAvailability.data?.data?.available === true,
-    t('Corporate Transfer')
-  )
+  const onlinePaymentMethods = payment.data?.data?.pay_methods ?? []
+  const effectiveOnlinePaymentMethod =
+    onlinePaymentMethod || onlinePaymentMethods[0]?.type || ''
+  const onlinePaymentReady =
+    payment.data?.data?.enable_online_topup === true &&
+    effectiveOnlinePaymentMethod !== ''
+  const corporateTransferAvailable =
+    corporateTransferAvailability.data?.data?.available === true
+  const paymentChannelReady =
+    paymentChannel === 'online'
+      ? onlinePaymentReady
+      : corporateTransferAvailable
   const pendingOrderAmount = pendingPurchase
     ? (pendingPurchase.amountMinor ??
       pendingPurchase.sku.price_amount_minor * pendingPurchase.quantity)
     : 0
   const checkout = buildStoreCheckout(
     pendingOrderAmount,
-    giftAmountYuan,
+    useGift && gift.data?.data?.settings.checkout_enabled === true,
     gift.data?.data?.account.available_cents ?? 0,
-    checkoutPaymentMethod
+    paymentChannelReady
   )
   let catalogEmptyMessage = t('No available SKU')
   if (products.isPending) catalogEmptyMessage = t('Loading products...')
@@ -167,26 +173,30 @@ export function EntitlementStore(props: EntitlementStoreProps) {
       sku: ProductSKU
       quantity: number
       amountMinor?: number
-      paymentMethod: string
+      paymentChannel: StorePaymentChannel
+      onlinePaymentMethod: string
+      useGift: boolean
     }) => {
       const expectedAmount =
         input.amountMinor ?? input.sku.price_amount_minor * input.quantity
+      const inputPaymentReady =
+        input.paymentChannel === 'online'
+          ? payment.data?.data?.enable_online_topup === true &&
+            input.onlinePaymentMethod !== ''
+          : corporateTransferAvailable
       const purchaseCheckout = buildStoreCheckout(
         expectedAmount,
-        giftAmountYuan,
+        input.useGift && gift.data?.data?.settings.checkout_enabled === true,
         gift.data?.data?.account.available_cents ?? 0,
-        input.paymentMethod
+        inputPaymentReady
       )
       const giftDiscountCents = purchaseCheckout.giftDiscountCents
-      if (!purchaseCheckout.giftAmountValid) {
-        throw new Error(t('Invalid gift amount'))
-      }
       if (!purchaseCheckout.canConfirm) {
         throw new Error(t('No online payment method is available'))
       }
 
       if (
-        input.paymentMethod === 'corporate_transfer' &&
+        input.paymentChannel === 'corporate_transfer' &&
         expectedAmount - giftDiscountCents > 0
       ) {
         const priorOrderNo = sessionStorage.getItem(
@@ -232,7 +242,7 @@ export function EntitlementStore(props: EntitlementStoreProps) {
       }
       const epay = await payStoreOrderEpay(
         orderResponse.data.order_no,
-        input.paymentMethod
+        input.onlinePaymentMethod
       )
       if (epay.message !== 'success' || !epay.url || !epay.data) {
         throw new Error(epay.message || t('Payment request failed'))
@@ -242,8 +252,9 @@ export function EntitlementStore(props: EntitlementStoreProps) {
     },
     onSuccess: async (result) => {
       setPendingPurchase(null)
-      setCheckoutPaymentMethod('')
-      setGiftAmountYuan('0.00')
+      setPaymentChannel('online')
+      setOnlinePaymentMethod('')
+      setUseGift(false)
       await queryClient.invalidateQueries({
         queryKey: ['entitlement-store', 'orders'],
       })
@@ -268,13 +279,11 @@ export function EntitlementStore(props: EntitlementStoreProps) {
   })
   const resumePayment = useMutation({
     mutationFn: async (orderNo: string) => {
-      const onlinePaymentMethod = availableMethods.find(
-        (method) => method.type !== 'corporate_transfer'
-      )?.type
-      if (!onlinePaymentMethod) {
+      const resumeOnlinePaymentMethod = onlinePaymentMethods[0]?.type
+      if (!onlinePaymentReady || !resumeOnlinePaymentMethod) {
         throw new Error(t('No online payment method is available'))
       }
-      const epay = await payStoreOrderEpay(orderNo, onlinePaymentMethod)
+      const epay = await payStoreOrderEpay(orderNo, resumeOnlinePaymentMethod)
       if (epay.message !== 'success' || !epay.url || !epay.data) {
         throw new Error(epay.message || t('Payment request failed'))
       }
@@ -322,53 +331,6 @@ export function EntitlementStore(props: EntitlementStoreProps) {
                 )}
               </p>
             ) : null}
-            <Card>
-              <CardContent className='grid gap-4 pt-6 md:grid-cols-[1fr_220px] md:items-end'>
-                <div>
-                  <p className='text-sm font-medium'>{t('Gift balance')}</p>
-                  <p className='mt-1 text-2xl font-semibold'>
-                    {new Intl.NumberFormat(undefined, {
-                      style: 'currency',
-                      currency: 'CNY',
-                    }).format(
-                      (gift.data?.data?.account.available_cents ?? 0) / 100
-                    )}
-                  </p>
-                  <p className='text-muted-foreground mt-1 text-sm'>
-                    {t(
-                      'Gift balance can offset subscription and recharge purchases, but cannot be used directly for API calls.'
-                    )}
-                  </p>
-                </div>
-                <label className='grid gap-2 text-sm'>
-                  <span>{t('Gift amount for next purchase')}</span>
-                  <Input
-                    type='number'
-                    min='0'
-                    max={(gift.data?.data?.account.available_cents ?? 0) / 100}
-                    step='0.01'
-                    value={giftAmountYuan}
-                    disabled={!gift.data?.data?.settings.checkout_enabled}
-                    onChange={(event) => setGiftAmountYuan(event.target.value)}
-                    onBlur={(event) => {
-                      const requestedYuan = Number(event.target.value)
-                      const availableCents =
-                        gift.data?.data?.account.available_cents ?? 0
-                      const normalizedCents = Number.isFinite(requestedYuan)
-                        ? Math.max(
-                            0,
-                            Math.min(
-                              Math.round(requestedYuan * 100),
-                              availableCents
-                            )
-                          )
-                        : 0
-                      setGiftAmountYuan((normalizedCents / 100).toFixed(2))
-                    }}
-                  />
-                </label>
-              </CardContent>
-            </Card>
             <section className='space-y-4' aria-labelledby='recharge-heading'>
               <div>
                 <h2 id='recharge-heading' className='text-xl font-semibold'>
@@ -389,7 +351,9 @@ export function EntitlementStore(props: EntitlementStoreProps) {
                       sku={item.sku}
                       loading={purchase.isPending}
                       onPurchase={(sku, amountMinor) => {
-                        setCheckoutPaymentMethod('')
+                        setPaymentChannel('online')
+                        setOnlinePaymentMethod('')
+                        setUseGift(false)
                         setPendingPurchase({
                           sku,
                           quantity: 1,
@@ -425,7 +389,9 @@ export function EntitlementStore(props: EntitlementStoreProps) {
                   items={catalog.subscription}
                   loading={purchase.isPending}
                   onPurchase={(sku, quantity) => {
-                    setCheckoutPaymentMethod('')
+                    setPaymentChannel('online')
+                    setOnlinePaymentMethod('')
+                    setUseGift(false)
                     setPendingPurchase({ sku, quantity })
                   }}
                 />
@@ -556,22 +522,39 @@ export function EntitlementStore(props: EntitlementStoreProps) {
             sku={pendingPurchase?.sku ?? null}
             quantity={pendingPurchase?.quantity ?? 1}
             amountMinor={pendingPurchase?.amountMinor}
-            paymentMethods={availableMethods}
-            paymentMethod={checkoutPaymentMethod}
+            paymentChannel={paymentChannel}
+            onlinePaymentMethods={onlinePaymentMethods}
+            onlinePaymentMethod={effectiveOnlinePaymentMethod}
+            onlinePaymentReady={onlinePaymentReady}
+            epayMissingConfiguration={
+              payment.data?.data?.epay_missing_configuration ?? []
+            }
+            corporateTransferAvailable={corporateTransferAvailable}
+            availableGiftCents={gift.data?.data?.account.available_cents ?? 0}
+            giftCheckoutEnabled={
+              gift.data?.data?.settings.checkout_enabled === true
+            }
+            useGift={useGift}
             checkout={checkout}
             loading={purchase.isPending}
             onOpenChange={(open) => {
               if (!open && !purchase.isPending) {
                 setPendingPurchase(null)
-                setCheckoutPaymentMethod('')
+                setPaymentChannel('online')
+                setOnlinePaymentMethod('')
+                setUseGift(false)
               }
             }}
-            onPaymentMethodChange={setCheckoutPaymentMethod}
+            onPaymentChannelChange={setPaymentChannel}
+            onOnlinePaymentMethodChange={setOnlinePaymentMethod}
+            onUseGiftChange={setUseGift}
             onConfirm={() => {
               if (!pendingPurchase) return
               purchase.mutate({
                 ...pendingPurchase,
-                paymentMethod: checkoutPaymentMethod,
+                paymentChannel,
+                onlinePaymentMethod: effectiveOnlinePaymentMethod,
+                useGift,
               })
             }}
           />

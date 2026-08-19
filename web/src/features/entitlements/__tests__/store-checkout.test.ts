@@ -14,20 +14,20 @@ import { buildStoreCheckout } from '../store-checkout'
 
 describe('store checkout confirmation', () => {
   test('requires a payment method when cash remains payable', () => {
-    const checkout = buildStoreCheckout(10_000, '0.00', 0, '')
+    const checkout = buildStoreCheckout(10_000, false, 0, false)
 
     assert.equal(checkout.cashPayableCents, 10_000)
     assert.equal(checkout.canConfirm, false)
   })
 
   test('allows confirmation after selecting a payment method', () => {
-    const checkout = buildStoreCheckout(10_000, '0.00', 0, 'alipay')
+    const checkout = buildStoreCheckout(10_000, false, 0, true)
 
     assert.equal(checkout.canConfirm, true)
   })
 
   test('allows confirmation without a payment method when gift covers the order', () => {
-    const checkout = buildStoreCheckout(10_000, '100.00', 10_000, '')
+    const checkout = buildStoreCheckout(10_000, true, 10_000, false)
 
     assert.equal(checkout.giftDiscountCents, 10_000)
     assert.equal(checkout.cashPayableCents, 0)
@@ -35,16 +35,16 @@ describe('store checkout confirmation', () => {
   })
 
   test('caps gift deduction at the order amount and available balance', () => {
-    const checkout = buildStoreCheckout(10_000, '200.00', 5_000, 'wechat')
+    const checkout = buildStoreCheckout(10_000, true, 5_000, true)
 
     assert.equal(checkout.giftDiscountCents, 5_000)
     assert.equal(checkout.cashPayableCents, 5_000)
   })
 
-  test('rejects an invalid gift amount before order submission', () => {
-    const checkout = buildStoreCheckout(10_000, '-1.00', 10_000, 'wechat')
+  test('does not deduct gift balance until the shopper selects it', () => {
+    const checkout = buildStoreCheckout(10_000, false, 10_000, true)
 
-    assert.equal(checkout.giftAmountValid, false)
-    assert.equal(checkout.canConfirm, false)
+    assert.equal(checkout.giftDiscountCents, 0)
+    assert.equal(checkout.cashPayableCents, 10_000)
   })
 })
