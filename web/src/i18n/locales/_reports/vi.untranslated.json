@@ -74,5 +74,7 @@
   "Saving changes only updates the draft. Publishing creates a new revision and shows it again to shoppers who dismissed the previous revision.": "Saving changes only updates the draft. Publishing creates a new revision and shows it again to shoppers who dismissed the previous revision.",
   "Save the draft before publishing.": "Save the draft before publishing.",
   "Every publication creates a new revision and shows the notice again to shoppers who dismissed the previous revision.": "Every publication creates a new revision and shows the notice again to shoppers who dismissed the previous revision.",
-  "Failed to save your preference": "Failed to save your preference"
+  "Failed to save your preference": "Failed to save your preference",
+  "Review the order and choose a payment method before submitting.": "Review the order and choose a payment method before submitting.",
+  "The order is fully covered by gift balance.": "The order is fully covered by gift balance."
 }

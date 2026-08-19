@@ -316,5 +316,14 @@
   "Store notice is not available": "Store notice is not available",
   "Failed to save your preference": "Failed to save your preference",
   "Not published": "Not published",
+  "Cash payable": "Cash payable",
+  "Choose a payment method": "Choose a payment method",
+  "Confirm order": "Confirm order",
+  "Confirm purchase": "Confirm purchase",
+  "No payment method is currently available": "No payment method is currently available",
+  "Order amount": "Order amount",
+  "Review the order and choose a payment method before submitting.": "Review the order and choose a payment method before submitting.",
+  "The order is fully covered by gift balance.": "The order is fully covered by gift balance.",
+  "JPEG, PNG or WebP; up to 5 files and 5MB each": "支持 JPEG、PNG 或 WebP；最多 5 张，每张不超过 5MB",
   "Publish": "Publish"
 }

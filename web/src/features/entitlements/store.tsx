@@ -19,7 +19,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 
 import {
   cancelStoreOrder,
@@ -34,17 +33,25 @@ import {
   getCorporateTransferAvailability,
   payStoreOrderEpay,
 } from './api'
+import { StoreCheckoutDialog } from './components/store-checkout-dialog'
 import { StoreNoticeDialog } from './components/store-notice-dialog'
 import { StoreRechargeCard } from './components/store-recharge-card'
 import { StoreSubscriptionComparison } from './components/store-subscription-comparison'
 import { corporateTransferStatusKey } from './corporate-transfer-status'
 import { formatDate, submitEpayForm } from './lib'
 import { buildStoreCatalog } from './store-catalog'
+import { buildStoreCheckout } from './store-checkout'
 import { buildStorePaymentMethods } from './store-payment-methods'
 import type { ProductOrder, ProductSKU } from './types'
 
 interface EntitlementStoreProps {
   initialPaymentResult?: 'success' | 'fail'
+}
+
+interface PendingPurchase {
+  sku: ProductSKU
+  quantity: number
+  amountMinor?: number
 }
 
 function storeOrderStatusKey(order: ProductOrder): string {
@@ -61,7 +68,9 @@ export function EntitlementStore(props: EntitlementStoreProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const [paymentMethod, setPaymentMethod] = useState('')
+  const [pendingPurchase, setPendingPurchase] =
+    useState<PendingPurchase | null>(null)
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState('')
   const [giftAmountYuan, setGiftAmountYuan] = useState('0.00')
   const [noticeOpen, setNoticeOpen] = useState(false)
   const autoOpenedRevision = useRef<number | null>(null)
@@ -100,8 +109,16 @@ export function EntitlementStore(props: EntitlementStoreProps) {
     corporateTransferAvailability.data?.data?.available === true,
     t('Corporate Transfer')
   )
-  const effectivePaymentMethod =
-    paymentMethod || availableMethods[0]?.type || ''
+  const pendingOrderAmount = pendingPurchase
+    ? (pendingPurchase.amountMinor ??
+      pendingPurchase.sku.price_amount_minor * pendingPurchase.quantity)
+    : 0
+  const checkout = buildStoreCheckout(
+    pendingOrderAmount,
+    giftAmountYuan,
+    gift.data?.data?.account.available_cents ?? 0,
+    checkoutPaymentMethod
+  )
   let catalogEmptyMessage = t('No available SKU')
   if (products.isPending) catalogEmptyMessage = t('Loading products...')
   if (products.isError) catalogEmptyMessage = t('Failed to load products')
@@ -150,27 +167,26 @@ export function EntitlementStore(props: EntitlementStoreProps) {
       sku: ProductSKU
       quantity: number
       amountMinor?: number
+      paymentMethod: string
     }) => {
       const expectedAmount =
         input.amountMinor ?? input.sku.price_amount_minor * input.quantity
-      const requestedGiftCents = Math.round(Number(giftAmountYuan || '0') * 100)
-      if (!Number.isFinite(requestedGiftCents) || requestedGiftCents < 0) {
+      const purchaseCheckout = buildStoreCheckout(
+        expectedAmount,
+        giftAmountYuan,
+        gift.data?.data?.account.available_cents ?? 0,
+        input.paymentMethod
+      )
+      const giftDiscountCents = purchaseCheckout.giftDiscountCents
+      if (!purchaseCheckout.giftAmountValid) {
         throw new Error(t('Invalid gift amount'))
       }
-      const giftDiscountCents = Math.max(
-        0,
-        Math.min(
-          requestedGiftCents,
-          gift.data?.data?.account.available_cents ?? 0,
-          expectedAmount
-        )
-      )
-      if (expectedAmount - giftDiscountCents > 0 && !effectivePaymentMethod) {
+      if (!purchaseCheckout.canConfirm) {
         throw new Error(t('No online payment method is available'))
       }
 
       if (
-        effectivePaymentMethod === 'corporate_transfer' &&
+        input.paymentMethod === 'corporate_transfer' &&
         expectedAmount - giftDiscountCents > 0
       ) {
         const priorOrderNo = sessionStorage.getItem(
@@ -216,7 +232,7 @@ export function EntitlementStore(props: EntitlementStoreProps) {
       }
       const epay = await payStoreOrderEpay(
         orderResponse.data.order_no,
-        effectivePaymentMethod
+        input.paymentMethod
       )
       if (epay.message !== 'success' || !epay.url || !epay.data) {
         throw new Error(epay.message || t('Payment request failed'))
@@ -225,6 +241,8 @@ export function EntitlementStore(props: EntitlementStoreProps) {
       return { kind: 'payment' as const }
     },
     onSuccess: async (result) => {
+      setPendingPurchase(null)
+      setCheckoutPaymentMethod('')
       setGiftAmountYuan('0.00')
       await queryClient.invalidateQueries({
         queryKey: ['entitlement-store', 'orders'],
@@ -250,10 +268,13 @@ export function EntitlementStore(props: EntitlementStoreProps) {
   })
   const resumePayment = useMutation({
     mutationFn: async (orderNo: string) => {
-      if (!effectivePaymentMethod) {
+      const onlinePaymentMethod = availableMethods.find(
+        (method) => method.type !== 'corporate_transfer'
+      )?.type
+      if (!onlinePaymentMethod) {
         throw new Error(t('No online payment method is available'))
       }
-      const epay = await payStoreOrderEpay(orderNo, effectivePaymentMethod)
+      const epay = await payStoreOrderEpay(orderNo, onlinePaymentMethod)
       if (epay.message !== 'success' || !epay.url || !epay.data) {
         throw new Error(epay.message || t('Payment request failed'))
       }
@@ -288,19 +309,6 @@ export function EntitlementStore(props: EntitlementStoreProps) {
             <CircleAlert className='mr-2 size-4' />
             {t('View Store Notice')}
           </Button>
-        ) : null}
-        {availableMethods.length > 0 ? (
-          <NativeSelect
-            value={effectivePaymentMethod}
-            onChange={(event) => setPaymentMethod(event.target.value)}
-            aria-label={t('Payment method')}
-          >
-            {availableMethods.map((method) => (
-              <NativeSelectOption key={method.type} value={method.type}>
-                {method.name || method.type}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
         ) : null}
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
@@ -380,13 +388,14 @@ export function EntitlementStore(props: EntitlementStoreProps) {
                       product={item.product}
                       sku={item.sku}
                       loading={purchase.isPending}
-                      onPurchase={(sku, amountMinor) =>
-                        purchase.mutate({
+                      onPurchase={(sku, amountMinor) => {
+                        setCheckoutPaymentMethod('')
+                        setPendingPurchase({
                           sku,
                           quantity: 1,
                           amountMinor,
                         })
-                      }
+                      }}
                     />
                   ))}
                 </div>
@@ -415,9 +424,10 @@ export function EntitlementStore(props: EntitlementStoreProps) {
                 <StoreSubscriptionComparison
                   items={catalog.subscription}
                   loading={purchase.isPending}
-                  onPurchase={(sku, quantity) =>
-                    purchase.mutate({ sku, quantity })
-                  }
+                  onPurchase={(sku, quantity) => {
+                    setCheckoutPaymentMethod('')
+                    setPendingPurchase({ sku, quantity })
+                  }}
                 />
               ) : (
                 <p className='text-muted-foreground rounded-xl border border-dashed p-6 text-sm'>
@@ -541,6 +551,30 @@ export function EntitlementStore(props: EntitlementStoreProps) {
               onDismissRevision={() => dismissNotice.mutate()}
             />
           ) : null}
+          <StoreCheckoutDialog
+            open={pendingPurchase !== null}
+            sku={pendingPurchase?.sku ?? null}
+            quantity={pendingPurchase?.quantity ?? 1}
+            amountMinor={pendingPurchase?.amountMinor}
+            paymentMethods={availableMethods}
+            paymentMethod={checkoutPaymentMethod}
+            checkout={checkout}
+            loading={purchase.isPending}
+            onOpenChange={(open) => {
+              if (!open && !purchase.isPending) {
+                setPendingPurchase(null)
+                setCheckoutPaymentMethod('')
+              }
+            }}
+            onPaymentMethodChange={setCheckoutPaymentMethod}
+            onConfirm={() => {
+              if (!pendingPurchase) return
+              purchase.mutate({
+                ...pendingPurchase,
+                paymentMethod: checkoutPaymentMethod,
+              })
+            }}
+          />
         </>
       </SectionPageLayout.Content>
     </SectionPageLayout>
