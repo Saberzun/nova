@@ -35,6 +35,7 @@ import type {
   CorporateTransferTicketDetail,
   CorporateTransferTicketListItem,
   CorporateReceiptVerification,
+  CorporateTransferAvailability,
 } from './types'
 
 export async function getStoreProducts(): Promise<ApiResponse<Product[]>> {
@@ -69,6 +70,12 @@ export async function createCorporateTransferOrder(
       headers: { 'Idempotency-Key': idempotencyKey },
     })
   ).data
+}
+
+export async function getCorporateTransferAvailability(): Promise<
+  ApiResponse<CorporateTransferAvailability>
+> {
+  return (await api.get('/api/store/corporate-transfers/availability')).data
 }
 
 export async function getCorporateTransferTickets(): Promise<

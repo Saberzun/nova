@@ -190,6 +190,7 @@ func SetApiRouter(router *gin.Engine) {
 			storeRoute.POST("/orders/:order_no/epay", middleware.CriticalRateLimit(), controller.StoreOrderRequestEpay)
 			storeRoute.POST("/orders/:order_no/cancel", middleware.CriticalRateLimit(), controller.CancelStoreOrder)
 			storeRoute.POST("/corporate-transfers", middleware.CriticalRateLimit(), controller.CreateCorporateTransferOrder)
+			storeRoute.GET("/corporate-transfers/availability", controller.GetCorporateTransferAvailability)
 			storeRoute.GET("/corporate-transfers/tickets", controller.ListCorporateTransferTickets)
 			storeRoute.GET("/corporate-transfers/tickets-unread", controller.GetCorporateTransferUnreadCount)
 			storeRoute.GET("/corporate-transfers/tickets/:ticket_no", controller.GetCorporateTransferTicket)

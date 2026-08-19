@@ -31,6 +31,7 @@ import {
   getStoreProducts,
   getTopupInfo,
   getGiftSelf,
+  getCorporateTransferAvailability,
   payStoreOrderEpay,
 } from './api'
 import { StoreNoticeDialog } from './components/store-notice-dialog'
@@ -39,6 +40,7 @@ import { StoreSubscriptionComparison } from './components/store-subscription-com
 import { corporateTransferStatusKey } from './corporate-transfer-status'
 import { formatDate, submitEpayForm } from './lib'
 import { buildStoreCatalog } from './store-catalog'
+import { buildStorePaymentMethods } from './store-payment-methods'
 import type { ProductOrder, ProductSKU } from './types'
 
 interface EntitlementStoreProps {
@@ -75,6 +77,10 @@ export function EntitlementStore(props: EntitlementStoreProps) {
     queryKey: ['entitlement-store', 'payment-methods'],
     queryFn: getTopupInfo,
   })
+  const corporateTransferAvailability = useQuery({
+    queryKey: ['entitlement-store', 'corporate-transfer-availability'],
+    queryFn: getCorporateTransferAvailability,
+  })
   const gift = useQuery({
     queryKey: ['entitlement-store', 'gift'],
     queryFn: getGiftSelf,
@@ -89,10 +95,11 @@ export function EntitlementStore(props: EntitlementStoreProps) {
     [products.data?.data]
   )
 
-  const availableMethods = [
-    ...(payment.data?.data?.pay_methods ?? []),
-    { type: 'corporate_transfer', name: t('Corporate Transfer') },
-  ]
+  const availableMethods = buildStorePaymentMethods(
+    payment.data?.data?.pay_methods ?? [],
+    corporateTransferAvailability.data?.data?.available === true,
+    t('Corporate Transfer')
+  )
   const effectivePaymentMethod =
     paymentMethod || availableMethods[0]?.type || ''
   let catalogEmptyMessage = t('No available SKU')
@@ -299,6 +306,14 @@ export function EntitlementStore(props: EntitlementStoreProps) {
       <SectionPageLayout.Content>
         <>
           <div className='space-y-8'>
+            {!corporateTransferAvailability.isPending &&
+            !corporateTransferAvailability.data?.data?.available ? (
+              <p className='rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-300'>
+                {t(
+                  'Corporate transfer is temporarily unavailable because collection information has not been published.'
+                )}
+              </p>
+            ) : null}
             <Card>
               <CardContent className='grid gap-4 pt-6 md:grid-cols-[1fr_220px] md:items-end'>
                 <div>

@@ -225,6 +225,11 @@ export interface TopupInfo {
   pay_methods: PaymentMethod[]
 }
 
+export interface CorporateTransferAvailability {
+  available: boolean
+  revision: number
+}
+
 export interface EpayResponse {
   message: string
   data?: Record<string, string>

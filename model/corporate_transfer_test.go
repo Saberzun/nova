@@ -92,6 +92,21 @@ func TestCorporateTransferCreationIsAtomicAndIdempotent(t *testing.T) {
 	assert.EqualValues(t, 1, ticketCount)
 }
 
+func TestCorporateCollectionAvailabilityRequiresPublishedEnabledChannel(t *testing.T) {
+	resetCorporateTransferFixtures(t)
+
+	available, revision, err := GetCorporateCollectionAvailability()
+	require.NoError(t, err)
+	assert.False(t, available)
+	assert.Zero(t, revision)
+
+	seedCorporateTransferStore(t)
+	available, revision, err = GetCorporateCollectionAvailability()
+	require.NoError(t, err)
+	assert.True(t, available)
+	assert.Equal(t, 1, revision)
+}
+
 func TestCorporateTransferApprovalRequiresExactUniqueReceiptsAndFulfillsOnce(t *testing.T) {
 	resetCorporateTransferFixtures(t)
 	sku := seedCorporateTransferStore(t)

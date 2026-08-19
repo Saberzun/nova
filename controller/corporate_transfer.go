@@ -133,10 +133,23 @@ func CreateCorporateTransferOrder(c *gin.Context) {
 	}
 	creation, err := model.CreateCorporateTransferOrder(model.CreateCorporateTransferOrderParams{UserId: c.GetInt("id"), SKUId: request.SKUId, Quantity: request.Quantity, RechargeAmountMinor: request.AmountMinor, GiftDiscountCents: request.GiftDiscountCents, IdempotencyKey: c.GetHeader("Idempotency-Key"), PriorOrderNo: request.PriorOrderNo})
 	if err != nil {
+		if errors.Is(err, model.ErrCorporateCollectionUnavailable) {
+			common.ApiErrorMsg(c, "对公转账暂不可用，管理员尚未发布收款信息")
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
 	common.ApiSuccess(c, creation)
+}
+
+func GetCorporateTransferAvailability(c *gin.Context) {
+	available, revision, err := model.GetCorporateCollectionAvailability()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"available": available, "revision": revision})
 }
 
 func ListCorporateTransferTickets(c *gin.Context) {

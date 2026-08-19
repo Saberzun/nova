@@ -322,6 +322,26 @@ func GetCorporateCollectionConfiguration() (*CorporateCollectionState, *Corporat
 	return &state, &revision, nil
 }
 
+func GetCorporateCollectionAvailability() (bool, int, error) {
+	_, revision, err := GetCorporateCollectionConfiguration()
+	if err != nil {
+		return false, 0, err
+	}
+	if revision == nil {
+		return false, 0, nil
+	}
+	var snapshot CorporateCollectionSnapshot
+	if err := common.UnmarshalJsonStr(revision.SnapshotJSON, &snapshot); err != nil {
+		return false, 0, err
+	}
+	for _, channel := range snapshot.Channels {
+		if channel.Enabled {
+			return true, revision.Revision, nil
+		}
+	}
+	return false, revision.Revision, nil
+}
+
 func SaveCorporateCollectionDraft(channels []CorporateCollectionChannel, operatorId int) error {
 	normalized, err := normalizeCorporateChannels(channels)
 	if err != nil {
