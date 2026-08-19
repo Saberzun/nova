@@ -539,7 +539,7 @@ export function AdminOperations() {
                 <Badge variant='secondary'>
                   {orderStatusLabel(order.status)}
                 </Badge>
-                {order.status === 'pending' ? (
+                {order.status === 'pending' && !order.payment_provider ? (
                   <Button
                     size='sm'
                     disabled={complete.isPending}
@@ -575,7 +575,9 @@ export function AdminOperations() {
                     {t('Cancel order')}
                   </Button>
                 ) : null}
-                {order.status === 'pending' && order.payment_provider ? (
+                {order.status === 'pending' &&
+                order.payment_provider &&
+                order.payment_provider !== 'corporate_transfer' ? (
                   <Button
                     size='sm'
                     variant='outline'
@@ -596,7 +598,8 @@ export function AdminOperations() {
                     {t('Reset payment')}
                   </Button>
                 ) : null}
-                {order.status === 'fulfilled' ? (
+                {order.status === 'fulfilled' &&
+                order.payment_provider !== 'corporate_transfer' ? (
                   <Button
                     size='sm'
                     variant='destructive'

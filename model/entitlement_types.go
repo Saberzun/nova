@@ -225,33 +225,35 @@ func (s *ProductSKU) NormalizeRechargeAmountBounds() {
 }
 
 type ProductOrder struct {
-	Id                     int                `json:"id"`
-	OrderNo                string             `json:"order_no" gorm:"type:varchar(64);uniqueIndex;not null"`
-	UserId                 int                `json:"user_id" gorm:"index;not null"`
-	Status                 string             `json:"status" gorm:"type:varchar(32);index;not null"`
-	PaymentMethod          string             `json:"payment_method" gorm:"type:varchar(32)"`
-	PaymentProvider        string             `json:"payment_provider" gorm:"type:varchar(32);index"`
-	ProviderTradeNo        *string            `json:"provider_trade_no" gorm:"type:varchar(128);uniqueIndex"`
-	ProviderPayload        string             `json:"-" gorm:"type:text"`
-	TotalAmountMinor       int64              `json:"total_amount_minor" gorm:"bigint;not null"`
-	OriginalAmountCents    int64              `json:"original_amount_cents" gorm:"bigint;not null;default:0"`
-	PromotionDiscountCents int64              `json:"promotion_discount_cents" gorm:"bigint;not null;default:0"`
-	GiftDiscountCents      int64              `json:"gift_discount_cents" gorm:"bigint;not null;default:0"`
-	CashPayableCents       int64              `json:"cash_payable_cents" gorm:"bigint;not null;default:0"`
-	CashPaidCents          int64              `json:"cash_paid_cents" gorm:"bigint;not null;default:0"`
-	GiftStatus             string             `json:"gift_status" gorm:"type:varchar(32);index"`
-	Currency               string             `json:"currency" gorm:"type:varchar(8);not null"`
-	ExpiresAt              int64              `json:"expires_at" gorm:"bigint;index"`
-	CreatedAt              int64              `json:"created_at" gorm:"bigint"`
-	PaidAt                 int64              `json:"paid_at" gorm:"bigint"`
-	FulfilledAt            int64              `json:"fulfilled_at" gorm:"bigint"`
-	CancelledAt            int64              `json:"cancelled_at" gorm:"bigint"`
-	RefundedAt             int64              `json:"refunded_at" gorm:"bigint"`
-	RefundOperatorId       int                `json:"refund_operator_id" gorm:"index"`
-	StatusReason           string             `json:"status_reason" gorm:"type:varchar(255)"`
-	StockRestored          bool               `json:"stock_restored"`
-	UpdatedAt              int64              `json:"updated_at" gorm:"bigint"`
-	Items                  []ProductOrderItem `json:"items,omitempty" gorm:"foreignKey:OrderId"`
+	Id                      int                `json:"id"`
+	OrderNo                 string             `json:"order_no" gorm:"type:varchar(64);uniqueIndex;not null"`
+	UserId                  int                `json:"user_id" gorm:"index;not null"`
+	Status                  string             `json:"status" gorm:"type:varchar(32);index;not null"`
+	PaymentMethod           string             `json:"payment_method" gorm:"type:varchar(32)"`
+	PaymentProvider         string             `json:"payment_provider" gorm:"type:varchar(32);index"`
+	ProviderTradeNo         *string            `json:"provider_trade_no" gorm:"type:varchar(128);uniqueIndex"`
+	ProviderPayload         string             `json:"-" gorm:"type:text"`
+	TotalAmountMinor        int64              `json:"total_amount_minor" gorm:"bigint;not null"`
+	OriginalAmountCents     int64              `json:"original_amount_cents" gorm:"bigint;not null;default:0"`
+	PromotionDiscountCents  int64              `json:"promotion_discount_cents" gorm:"bigint;not null;default:0"`
+	GiftDiscountCents       int64              `json:"gift_discount_cents" gorm:"bigint;not null;default:0"`
+	CashPayableCents        int64              `json:"cash_payable_cents" gorm:"bigint;not null;default:0"`
+	CashPaidCents           int64              `json:"cash_paid_cents" gorm:"bigint;not null;default:0"`
+	GiftStatus              string             `json:"gift_status" gorm:"type:varchar(32);index"`
+	Currency                string             `json:"currency" gorm:"type:varchar(8);not null"`
+	ExpiresAt               int64              `json:"expires_at" gorm:"bigint;index"`
+	CreatedAt               int64              `json:"created_at" gorm:"bigint"`
+	PaidAt                  int64              `json:"paid_at" gorm:"bigint"`
+	FulfilledAt             int64              `json:"fulfilled_at" gorm:"bigint"`
+	CancelledAt             int64              `json:"cancelled_at" gorm:"bigint"`
+	RefundedAt              int64              `json:"refunded_at" gorm:"bigint"`
+	RefundOperatorId        int                `json:"refund_operator_id" gorm:"index"`
+	StatusReason            string             `json:"status_reason" gorm:"type:varchar(255)"`
+	StockRestored           bool               `json:"stock_restored"`
+	UpdatedAt               int64              `json:"updated_at" gorm:"bigint"`
+	Items                   []ProductOrderItem `json:"items,omitempty" gorm:"foreignKey:OrderId"`
+	CorporateTicketNo       string             `json:"corporate_ticket_no,omitempty" gorm:"-"`
+	CorporateTransferStatus string             `json:"corporate_transfer_status,omitempty" gorm:"-"`
 }
 
 func (o *ProductOrder) BeforeCreate(_ *gorm.DB) error {

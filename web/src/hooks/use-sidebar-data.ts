@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -40,6 +41,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import type { SidebarData } from '@/components/layout/types'
+import { getCorporateTransferUnreadCount } from '@/features/entitlements/api'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -50,6 +52,11 @@ import { ROLE } from '@/lib/roles'
  */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
+  const ticketUnread = useQuery({
+    queryKey: ['corporate-transfer', 'unread'],
+    queryFn: getCorporateTransferUnreadCount,
+    refetchInterval: 60_000,
+  })
 
   return {
     navGroups: [
@@ -120,6 +127,15 @@ export function useSidebarData(): SidebarData {
             title: t('Friend Referral'),
             url: '/referral',
             icon: Share2,
+          },
+          {
+            title: t('My Tickets'),
+            url: '/tickets',
+            icon: MessageSquare,
+            badge:
+              (ticketUnread.data?.data?.count ?? 0) > 0
+                ? String(ticketUnread.data?.data?.count)
+                : undefined,
           },
           {
             title: t('Profile'),

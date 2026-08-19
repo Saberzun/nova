@@ -99,6 +99,10 @@ func CreateProductOrder(userId int, skuId int, quantity int, rechargeAmountMinor
 }
 
 func CreateProductOrderWithGift(userId int, skuId int, quantity int, rechargeAmountMinor int64, giftDiscountCents int64) (*ProductOrder, error) {
+	return createProductOrderWithGiftAndHook(userId, skuId, quantity, rechargeAmountMinor, giftDiscountCents, nil)
+}
+
+func createProductOrderWithGiftAndHook(userId int, skuId int, quantity int, rechargeAmountMinor int64, giftDiscountCents int64, hook func(*gorm.DB, *ProductOrder) error) (*ProductOrder, error) {
 	if userId <= 0 || skuId <= 0 || quantity <= 0 || quantity > 100 {
 		return nil, errors.New("invalid product order")
 	}
@@ -261,6 +265,9 @@ func CreateProductOrderWithGift(userId int, skuId int, quantity int, rechargeAmo
 		}
 		order.Items = []ProductOrderItem{item}
 		created = order
+		if hook != nil {
+			return hook(tx, &created)
+		}
 		return nil
 	})
 	if err != nil {
@@ -383,130 +390,130 @@ func CompleteProductOrderWithProvider(orderNo string, providerTradeNo string, ex
 	if orderNo == "" {
 		return errors.New("order number is empty")
 	}
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		var order ProductOrder
-		if err := lockForUpdate(tx).Preload("Items").Where("order_no = ?", orderNo).First(&order).Error; err != nil {
-			return err
-		}
-		if order.Status == ProductOrderStatusFulfilled {
-			return nil
-		}
-		if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
-			return ErrPaymentMethodMismatch
-		}
-		if order.Status != ProductOrderStatusPending && order.Status != ProductOrderStatusPaid {
-			return fmt.Errorf("order cannot be fulfilled from status %s", order.Status)
-		}
-		now := getDBTimestampTx(tx)
-		if order.OriginalAmountCents == 0 {
-			order.OriginalAmountCents = order.TotalAmountMinor + order.GiftDiscountCents
-		}
-		if order.CashPayableCents == 0 && order.TotalAmountMinor > 0 {
-			order.CashPayableCents = order.TotalAmountMinor
-		}
-		if err := captureGiftTx(tx, &order); err != nil {
-			return err
-		}
-		order.CashPaidCents = order.CashPayableCents
-		batchId := fmt.Sprintf("FUL-%d-%s", order.Id, common.GetRandomString(8))
-		for _, item := range order.Items {
-			var entitlementType EntitlementType
-			if err := tx.Where("id = ?", item.EntitlementTypeId).First(&entitlementType).Error; err != nil {
-				return err
-			}
-			for quantityIndex := 0; quantityIndex < item.Quantity; quantityIndex++ {
-				fulfillmentKey := fmt.Sprintf("%d:%d", item.Id, quantityIndex)
-				var existingCount int64
-				if err := tx.Model(&Entitlement{}).Where("fulfillment_key = ?", fulfillmentKey).Count(&existingCount).Error; err != nil {
-					return err
-				}
-				if existingCount > 0 {
-					continue
-				}
-				state := EntitlementStateActive
-				startAt := now
-				expireAt := int64(0)
-				activationDeadline := int64(0)
-				if entitlementType.AssetKind == EntitlementAssetSubscription {
-					switch item.ActivationPolicy {
-					case ActivationPolicyManual:
-						state, startAt = EntitlementStatePending, 0
-						if item.ActivationDeadlineSec > 0 {
-							activationDeadline = now + item.ActivationDeadlineSec
-						}
-					case ActivationPolicyDeferred:
-						var lastExpire int64
-						if err := tx.Model(&Entitlement{}).
-							Where("user_id = ? AND entitlement_type_id = ? AND state IN ?", order.UserId, item.EntitlementTypeId, []string{EntitlementStateActive, EntitlementStateQueued}).
-							Select("COALESCE(MAX(expire_at), 0)").Scan(&lastExpire).Error; err != nil {
-							return err
-						}
-						if lastExpire > startAt {
-							startAt, state = lastExpire, EntitlementStateQueued
-						}
-					}
-					if startAt > 0 {
-						expireAt = startAt + item.ValiditySeconds
-					}
-				}
-				entitlement := Entitlement{
-					UserId:             order.UserId,
-					EntitlementTypeId:  item.EntitlementTypeId,
-					AssetKind:          entitlementType.AssetKind,
-					ProductId:          item.ProductId,
-					SKUId:              item.SKUId,
-					OrderItemId:        item.Id,
-					QuantityIndex:      quantityIndex,
-					FulfillmentKey:     &fulfillmentKey,
-					State:              state,
-					TotalQuota:         item.GrantTotalQuota,
-					DailyQuota:         item.GrantDailyQuota,
-					ResetTimezone:      "Asia/Shanghai",
-					StartAt:            startAt,
-					ExpireAt:           expireAt,
-					ActivationDeadline: activationDeadline,
-					SourceType:         "order",
-					SourceId:           order.Id,
-					FulfillmentBatchId: batchId,
-				}
-				if err := tx.Create(&entitlement).Error; err != nil {
-					return err
-				}
-			}
-		}
-		tradeNo := strings.TrimSpace(providerTradeNo)
-		updates := map[string]interface{}{
-			"status":                ProductOrderStatusFulfilled,
-			"payment_method":        strings.TrimSpace(paymentMethod),
-			"original_amount_cents": order.OriginalAmountCents,
-			"cash_payable_cents":    order.CashPayableCents,
-			"cash_paid_cents":       order.CashPaidCents,
-			"paid_at":               now,
-			"fulfilled_at":          now,
-			"updated_at":            common.GetTimestamp(),
-		}
-		if order.GiftDiscountCents > 0 {
-			updates["gift_status"] = GiftHoldStatusCaptured
-		}
-		if expectedPaymentProvider != "" {
-			updates["payment_provider"] = expectedPaymentProvider
-		}
-		if strings.TrimSpace(providerPayload) != "" {
-			updates["provider_payload"] = providerPayload
-		}
-		if tradeNo != "" {
-			updates["provider_trade_no"] = tradeNo
-		}
-		if err := tx.Model(&order).Updates(updates).Error; err != nil {
-			return err
-		}
-		order.PaymentMethod = strings.TrimSpace(paymentMethod)
-		return createReferralRewardTx(tx, &order, now)
+	return DB.Transaction(func(tx *gorm.DB) error {
+		return completeProductOrderWithProviderTx(tx, orderNo, providerTradeNo, expectedPaymentProvider, paymentMethod, providerPayload)
 	})
-	if err != nil {
+}
+
+func completeProductOrderWithProviderTx(tx *gorm.DB, orderNo string, providerTradeNo string, expectedPaymentProvider string, paymentMethod string, providerPayload string) error {
+	var order ProductOrder
+	if err := lockForUpdate(tx).Preload("Items").Where("order_no = ?", orderNo).First(&order).Error; err != nil {
 		return err
 	}
-	return nil
+	if order.Status == ProductOrderStatusFulfilled {
+		return nil
+	}
+	if expectedPaymentProvider != "" && order.PaymentProvider != expectedPaymentProvider {
+		return ErrPaymentMethodMismatch
+	}
+	if order.Status != ProductOrderStatusPending && order.Status != ProductOrderStatusPaid {
+		return fmt.Errorf("order cannot be fulfilled from status %s", order.Status)
+	}
+	now := getDBTimestampTx(tx)
+	if order.OriginalAmountCents == 0 {
+		order.OriginalAmountCents = order.TotalAmountMinor + order.GiftDiscountCents
+	}
+	if order.CashPayableCents == 0 && order.TotalAmountMinor > 0 {
+		order.CashPayableCents = order.TotalAmountMinor
+	}
+	if err := captureGiftTx(tx, &order); err != nil {
+		return err
+	}
+	order.CashPaidCents = order.CashPayableCents
+	batchId := fmt.Sprintf("FUL-%d-%s", order.Id, common.GetRandomString(8))
+	for _, item := range order.Items {
+		var entitlementType EntitlementType
+		if err := tx.Where("id = ?", item.EntitlementTypeId).First(&entitlementType).Error; err != nil {
+			return err
+		}
+		for quantityIndex := 0; quantityIndex < item.Quantity; quantityIndex++ {
+			fulfillmentKey := fmt.Sprintf("%d:%d", item.Id, quantityIndex)
+			var existingCount int64
+			if err := tx.Model(&Entitlement{}).Where("fulfillment_key = ?", fulfillmentKey).Count(&existingCount).Error; err != nil {
+				return err
+			}
+			if existingCount > 0 {
+				continue
+			}
+			state := EntitlementStateActive
+			startAt := now
+			expireAt := int64(0)
+			activationDeadline := int64(0)
+			if entitlementType.AssetKind == EntitlementAssetSubscription {
+				switch item.ActivationPolicy {
+				case ActivationPolicyManual:
+					state, startAt = EntitlementStatePending, 0
+					if item.ActivationDeadlineSec > 0 {
+						activationDeadline = now + item.ActivationDeadlineSec
+					}
+				case ActivationPolicyDeferred:
+					var lastExpire int64
+					if err := tx.Model(&Entitlement{}).
+						Where("user_id = ? AND entitlement_type_id = ? AND state IN ?", order.UserId, item.EntitlementTypeId, []string{EntitlementStateActive, EntitlementStateQueued}).
+						Select("COALESCE(MAX(expire_at), 0)").Scan(&lastExpire).Error; err != nil {
+						return err
+					}
+					if lastExpire > startAt {
+						startAt, state = lastExpire, EntitlementStateQueued
+					}
+				}
+				if startAt > 0 {
+					expireAt = startAt + item.ValiditySeconds
+				}
+			}
+			entitlement := Entitlement{
+				UserId:             order.UserId,
+				EntitlementTypeId:  item.EntitlementTypeId,
+				AssetKind:          entitlementType.AssetKind,
+				ProductId:          item.ProductId,
+				SKUId:              item.SKUId,
+				OrderItemId:        item.Id,
+				QuantityIndex:      quantityIndex,
+				FulfillmentKey:     &fulfillmentKey,
+				State:              state,
+				TotalQuota:         item.GrantTotalQuota,
+				DailyQuota:         item.GrantDailyQuota,
+				ResetTimezone:      "Asia/Shanghai",
+				StartAt:            startAt,
+				ExpireAt:           expireAt,
+				ActivationDeadline: activationDeadline,
+				SourceType:         "order",
+				SourceId:           order.Id,
+				FulfillmentBatchId: batchId,
+			}
+			if err := tx.Create(&entitlement).Error; err != nil {
+				return err
+			}
+		}
+	}
+	tradeNo := strings.TrimSpace(providerTradeNo)
+	updates := map[string]interface{}{
+		"status":                ProductOrderStatusFulfilled,
+		"payment_method":        strings.TrimSpace(paymentMethod),
+		"original_amount_cents": order.OriginalAmountCents,
+		"cash_payable_cents":    order.CashPayableCents,
+		"cash_paid_cents":       order.CashPaidCents,
+		"paid_at":               now,
+		"fulfilled_at":          now,
+		"updated_at":            common.GetTimestamp(),
+	}
+	if order.GiftDiscountCents > 0 {
+		updates["gift_status"] = GiftHoldStatusCaptured
+	}
+	if expectedPaymentProvider != "" {
+		updates["payment_provider"] = expectedPaymentProvider
+	}
+	if strings.TrimSpace(providerPayload) != "" {
+		updates["provider_payload"] = providerPayload
+	}
+	if tradeNo != "" {
+		updates["provider_trade_no"] = tradeNo
+	}
+	if err := tx.Model(&order).Updates(updates).Error; err != nil {
+		return err
+	}
+	order.PaymentMethod = strings.TrimSpace(paymentMethod)
+	return createReferralRewardTx(tx, &order, now)
 }
 
 func restoreProductOrderStockTx(tx *gorm.DB, order *ProductOrder) error {
@@ -589,52 +596,56 @@ func RefundProductOrder(orderNo string, operatorId int, reason string) error {
 		return errors.New("invalid product order refund")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		var order ProductOrder
-		if err := lockForUpdate(tx).Preload("Items").Where("order_no = ?", orderNo).First(&order).Error; err != nil {
-			return err
-		}
-		if order.Status == ProductOrderStatusRefunded {
-			return nil
-		}
-		if order.Status != ProductOrderStatusFulfilled && order.Status != ProductOrderStatusPaid {
-			return fmt.Errorf("order cannot be refunded from status %s", order.Status)
-		}
-		var entitlements []Entitlement
-		if err := lockForUpdate(tx).Where("source_type = ? AND source_id = ?", "order", order.Id).Find(&entitlements).Error; err != nil {
-			return err
-		}
-		for _, entitlement := range entitlements {
-			if entitlement.UsedQuota != 0 || entitlement.ReservedQuota != 0 {
-				return errors.New("order contains consumed or reserved entitlement quota")
-			}
-		}
-		if err := tx.Model(&Entitlement{}).Where("source_type = ? AND source_id = ?", "order", order.Id).
-			Update("state", EntitlementStateCancelled).Error; err != nil {
-			return err
-		}
-		if err := refundGiftTx(tx, &order, reason); err != nil {
-			return err
-		}
-		if err := reverseReferralRewardTx(tx, &order, reason); err != nil {
-			return err
-		}
-		if err := restoreProductOrderStockTx(tx, &order); err != nil {
-			return err
-		}
-		now := getDBTimestampTx(tx)
-		updates := map[string]interface{}{
-			"status":             ProductOrderStatusRefunded,
-			"status_reason":      reason,
-			"refunded_at":        now,
-			"refund_operator_id": operatorId,
-			"stock_restored":     order.StockRestored,
-			"updated_at":         common.GetTimestamp(),
-		}
-		if order.GiftDiscountCents > 0 {
-			updates["gift_status"] = GiftHoldStatusRefunded
-		}
-		return tx.Model(&order).Updates(updates).Error
+		return refundProductOrderTx(tx, orderNo, operatorId, reason)
 	})
+}
+
+func refundProductOrderTx(tx *gorm.DB, orderNo string, operatorId int, reason string) error {
+	var order ProductOrder
+	if err := lockForUpdate(tx).Preload("Items").Where("order_no = ?", orderNo).First(&order).Error; err != nil {
+		return err
+	}
+	if order.Status == ProductOrderStatusRefunded {
+		return nil
+	}
+	if order.Status != ProductOrderStatusFulfilled && order.Status != ProductOrderStatusPaid {
+		return fmt.Errorf("order cannot be refunded from status %s", order.Status)
+	}
+	var entitlements []Entitlement
+	if err := lockForUpdate(tx).Where("source_type = ? AND source_id = ?", "order", order.Id).Find(&entitlements).Error; err != nil {
+		return err
+	}
+	for _, entitlement := range entitlements {
+		if entitlement.UsedQuota != 0 || entitlement.ReservedQuota != 0 {
+			return errors.New("order contains consumed or reserved entitlement quota")
+		}
+	}
+	if err := tx.Model(&Entitlement{}).Where("source_type = ? AND source_id = ?", "order", order.Id).
+		Update("state", EntitlementStateCancelled).Error; err != nil {
+		return err
+	}
+	if err := refundGiftTx(tx, &order, reason); err != nil {
+		return err
+	}
+	if err := reverseReferralRewardTx(tx, &order, reason); err != nil {
+		return err
+	}
+	if err := restoreProductOrderStockTx(tx, &order); err != nil {
+		return err
+	}
+	now := getDBTimestampTx(tx)
+	updates := map[string]interface{}{
+		"status":             ProductOrderStatusRefunded,
+		"status_reason":      reason,
+		"refunded_at":        now,
+		"refund_operator_id": operatorId,
+		"stock_restored":     order.StockRestored,
+		"updated_at":         common.GetTimestamp(),
+	}
+	if order.GiftDiscountCents > 0 {
+		updates["gift_status"] = GiftHoldStatusRefunded
+	}
+	return tx.Model(&order).Updates(updates).Error
 }
 
 func ExpirePendingProductOrders(limit int) (int, error) {

@@ -678,6 +678,26 @@ func ListStoreOrders(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	for index := range orders {
+		if orders[index].PaymentProvider != model.PaymentProviderCorporateTransfer {
+			continue
+		}
+		var application model.CorporateTransferApplication
+		if err := model.DB.Select("ticket_id", "status").Where("order_id = ?", orders[index].Id).Limit(1).Find(&application).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if application.TicketId == 0 {
+			continue
+		}
+		var ticket model.SupportTicket
+		if err := model.DB.Select("ticket_no").Where("id = ?", application.TicketId).First(&ticket).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		orders[index].CorporateTicketNo = ticket.TicketNo
+		orders[index].CorporateTransferStatus = application.Status
+	}
 	common.ApiSuccess(c, orders)
 }
 
@@ -728,6 +748,15 @@ func AdminCompleteProductOrder(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	var order model.ProductOrder
+	if err := model.DB.Select("payment_provider").Where("order_no = ?", c.Param("order_no")).First(&order).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if order.PaymentProvider != "" {
+		common.ApiErrorMsg(c, "已绑定支付渠道的订单不能手工完成")
+		return
+	}
 	if err := model.CompleteProductOrder(c.Param("order_no"), request.ProviderTradeNo, request.PaymentMethod); err != nil {
 		common.ApiError(c, err)
 		return
@@ -768,6 +797,15 @@ func AdminRefundProductOrder(c *gin.Context) {
 		common.ApiErrorMsg(c, "退款原因不能为空")
 		return
 	}
+	var order model.ProductOrder
+	if err := model.DB.Select("payment_provider").Where("order_no = ?", c.Param("order_no")).First(&order).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if order.PaymentProvider == model.PaymentProviderCorporateTransfer {
+		common.ApiErrorMsg(c, "对公转账订单必须通过退款登记流程处理")
+		return
+	}
 	if err := model.RefundProductOrder(c.Param("order_no"), c.GetInt("id"), request.Reason); err != nil {
 		common.ApiError(c, err)
 		return
@@ -793,6 +831,10 @@ func AdminResetProductOrderPayment(c *gin.Context) {
 	}
 	if order.Status != model.ProductOrderStatusPending || order.PaymentProvider == "" {
 		common.ApiErrorMsg(c, "订单不处于待对账状态")
+		return
+	}
+	if order.PaymentProvider == model.PaymentProviderCorporateTransfer {
+		common.ApiErrorMsg(c, "对公转账申请不能重置为普通支付订单")
 		return
 	}
 	if err := model.ResetProductOrderPaymentPreparation(order.OrderNo, order.UserId, order.PaymentProvider, request.Reason); err != nil {

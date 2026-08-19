@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -70,6 +73,16 @@ func runEntitlementLifecycleOnce() {
 		}
 	}
 	for {
+		count, err := model.ExpireCorporateTransferApplications(entitlementLifecycleBatchSize)
+		if err != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("corporate transfer expiration failed: %v", err))
+			return
+		}
+		if count < entitlementLifecycleBatchSize {
+			break
+		}
+	}
+	for {
 		count, err := model.ReleaseDueReferralRewards(entitlementLifecycleBatchSize)
 		if err != nil {
 			logger.LogWarn(ctx, fmt.Sprintf("referral reward release failed: %v", err))
@@ -77,6 +90,27 @@ func runEntitlementLifecycleOnce() {
 		}
 		if count < entitlementLifecycleBatchSize {
 			break
+		}
+	}
+	attachments, err := model.ListDueCorporateEvidencePurges(entitlementLifecycleBatchSize)
+	if err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("corporate evidence retention scan failed: %v", err))
+		return
+	}
+	storageRoot := common.GetEnvOrDefaultString("CORPORATE_TRANSFER_STORAGE_PATH", "./data/corporate-transfer")
+	for _, attachment := range attachments {
+		cleanKey := filepath.Clean(attachment.StorageKey)
+		if cleanKey == "." || filepath.IsAbs(cleanKey) || strings.HasPrefix(cleanKey, "..") {
+			logger.LogWarn(ctx, fmt.Sprintf("corporate evidence has unsafe storage key: attachment=%d", attachment.Id))
+			continue
+		}
+		path := filepath.Join(storageRoot, cleanKey)
+		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+			logger.LogWarn(ctx, fmt.Sprintf("corporate evidence purge failed: attachment=%d error=%v", attachment.Id, removeErr))
+			continue
+		}
+		if markErr := model.MarkCorporateEvidencePurged(attachment.Id); markErr != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("corporate evidence purge mark failed: attachment=%d error=%v", attachment.Id, markErr))
 		}
 	}
 }

@@ -1,0 +1,3 @@
+# Separate corporate-transfer review from orders and tickets
+
+Corporate Transfer uses the existing product order as the commercial and fulfillment record, a separate receipt-verification record as the authoritative manual-payment review, and a linked ticket only for instructions, evidence, and communication. This separation prevents ticket actions such as replies, closure, or reopening from changing financial state, while preserving the existing idempotent entitlement-fulfillment path; approving a transfer must validate a unique external receipt reference and settle the order through a dedicated transaction rather than the generic manual-completion endpoint.
