@@ -1,20 +1,36 @@
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
 import { MessageSquareText } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import {
+  sideDrawerContentClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { SectionPageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 
 import { getCorporateTransferTickets } from './api'
 import { corporateTransferStatusKey } from './corporate-transfer-status'
+import { CorporateTransferTicketDetail } from './corporate-transfer-ticket-detail'
 import { formatDate } from './lib'
 
 export function CorporateTransferTickets() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const [selectedTicket, setSelectedTicket] = useState<{
+    ticketNo: string
+    subject: string
+  } | null>(null)
   const tickets = useQuery({
     queryKey: ['corporate-transfer', 'tickets'],
     queryFn: getCorporateTransferTickets,
@@ -55,9 +71,9 @@ export function CorporateTransferTickets() {
                 <Button
                   variant='outline'
                   onClick={() =>
-                    navigate({
-                      to: '/tickets/$ticketNo',
-                      params: { ticketNo: item.ticket.ticket_no },
+                    setSelectedTicket({
+                      ticketNo: item.ticket.ticket_no,
+                      subject: item.ticket.subject,
                     })
                   }
                 >
@@ -72,6 +88,34 @@ export function CorporateTransferTickets() {
             </div>
           ) : null}
         </div>
+        <Sheet
+          open={Boolean(selectedTicket)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedTicket(null)
+          }}
+        >
+          <SheetContent
+            side='right'
+            className={sideDrawerContentClassName(
+              'max-w-none sm:!max-w-[min(900px,92vw)]'
+            )}
+          >
+            <SheetHeader className={sideDrawerHeaderClassName()}>
+              <SheetTitle>{selectedTicket?.subject ?? t('Ticket')}</SheetTitle>
+              <SheetDescription>
+                {selectedTicket?.ticketNo ?? ''}
+              </SheetDescription>
+            </SheetHeader>
+            <div className={sideDrawerFormClassName()}>
+              {selectedTicket ? (
+                <CorporateTransferTicketDetail
+                  ticketNo={selectedTicket.ticketNo}
+                  embedded
+                />
+              ) : null}
+            </div>
+          </SheetContent>
+        </Sheet>
       </SectionPageLayout.Content>
     </SectionPageLayout>
   )

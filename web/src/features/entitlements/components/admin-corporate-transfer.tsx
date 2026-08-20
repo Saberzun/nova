@@ -3,11 +3,23 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import {
+  sideDrawerContentClassName,
+  sideDrawerFormClassName,
+  sideDrawerHeaderClassName,
+} from '@/components/drawer-layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
@@ -538,33 +550,31 @@ function TransferReviewDetail(props: {
         </CardHeader>
         <CardContent className='space-y-4'>
           {data.messages.map((message) => (
-            <div key={message.id} className='rounded-xl border p-4'>
-              <div className='flex justify-between'>
-                <Badge variant='outline'>{t(message.sender_role)}</Badge>
-                <span className='text-muted-foreground text-xs'>
-                  {formatDate(message.created_at)}
-                </span>
-              </div>
-              {message.body ? (
-                <p className='mt-2 text-sm whitespace-pre-wrap'>
-                  {message.body}
-                </p>
-              ) : null}
-              <div className='mt-3 grid gap-3 sm:grid-cols-2'>
-                {message.attachments?.map((attachment) => (
-                  <a
-                    key={attachment.id}
-                    href={`/api/store/corporate-transfers/attachments/${attachment.id}`}
-                    target='_blank'
-                    rel='noreferrer'
-                  >
-                    <img
-                      src={`/api/store/corporate-transfers/attachments/${attachment.id}`}
+            <div
+              key={message.id}
+              className={`flex ${message.sender_role === 'admin' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`w-full max-w-[90%] space-y-2 rounded-2xl px-4 py-3 ${message.sender_role === 'admin' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+              >
+                <div className='flex justify-between gap-3 text-xs opacity-75'>
+                  <span>{t(message.sender_role)}</span>
+                  <span>{formatDate(message.created_at)}</span>
+                </div>
+                {message.body ? (
+                  <p className='text-sm whitespace-pre-wrap'>{message.body}</p>
+                ) : null}
+                <div className='grid gap-3 sm:grid-cols-2'>
+                  {message.attachments?.map((attachment) => (
+                    <AuthenticatedCorporateImage
+                      key={attachment.id}
+                      path={`/api/store/corporate-transfers/attachments/${attachment.id}`}
                       alt={attachment.original_name}
                       className='max-h-[540px] w-full rounded-xl border object-contain'
+                      openOriginal
                     />
-                  </a>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           ))}
@@ -888,17 +898,29 @@ export function AdminCorporateTransfer() {
           </table>
         </div>
       </div>
-      {selected ? (
-        <div className='border-primary/30 space-y-4 rounded-2xl border p-5'>
-          <div className='flex items-center justify-between'>
-            <h3 className='text-lg font-semibold'>{t('Review details')}</h3>
-            <Button variant='ghost' onClick={() => setSelected(null)}>
-              {t('Close')}
-            </Button>
+      <Sheet
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null)
+        }}
+      >
+        <SheetContent
+          side='right'
+          className={sideDrawerContentClassName(
+            'max-w-none sm:!max-w-[min(960px,92vw)]'
+          )}
+        >
+          <SheetHeader className={sideDrawerHeaderClassName()}>
+            <SheetTitle>{t('Review details')}</SheetTitle>
+            <SheetDescription>
+              {selected?.application_no ?? ''}
+            </SheetDescription>
+          </SheetHeader>
+          <div className={sideDrawerFormClassName()}>
+            {selected ? <TransferReviewDetail application={selected} /> : null}
           </div>
-          <TransferReviewDetail application={selected} />
-        </div>
-      ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
