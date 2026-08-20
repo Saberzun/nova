@@ -587,4 +587,17 @@ export const STATIC_I18N_KEYS = [
   'settled',
   'refunded',
   'reconciliation_required',
+
+  // Corporate transfer records are stored as locale-neutral domain text and
+  // projected through these keys when rendered.
+  'Order created. Complete the transfer and upload payment evidence.',
+  'Corporate transfer cancelled before payment',
+  'Payment evidence deadline expired',
+  'Ticket closed by administrator',
+  'Ticket reopened for communication only; the payment review result is unchanged.',
+  'Receipt verified for order {{orderNo}}. Amount ¥{{amount}}; entitlement fulfilled.',
+  'Refund registered: ¥{{amount}}, reference {{reference}}.',
+  'Corporate transfer evidence: {{orderNo}}',
+  'Valid',
+  'Voided',
 ] as const

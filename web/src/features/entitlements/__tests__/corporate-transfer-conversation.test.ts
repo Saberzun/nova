@@ -8,11 +8,14 @@ License, or (at your option) any later version.
 */
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 
 import {
-  corporateTicketParticipantKey,
   canSendCorporateTicketReply,
+  corporateTicketParticipantKey,
+  corporateTransferLocalizedText,
+  corporateTransferReceiptStatusKey,
   mergeCorporateReplyFiles,
   partitionCorporateTicketAttachments,
 } from '../corporate-transfer-conversation'
@@ -48,6 +51,44 @@ function attachment(
 }
 
 describe('corporate transfer conversation projection', () => {
+  test('keeps Chinese corporate transfer interface keys translated', () => {
+    const locale = JSON.parse(
+      readFileSync(
+        new URL('../../../i18n/locales/zh.json', import.meta.url),
+        'utf8'
+      )
+    ).translation as Record<string, string>
+    const keys = [
+      'Verify receipts against the actual collection account before fulfillment.',
+      'User-visible reason for more information or rejection',
+      'Applications: {{count}}',
+      'Select reply images',
+      'Corporate transfer cancelled before payment',
+      'Payment evidence deadline expired',
+    ]
+
+    for (const key of keys) {
+      assert.ok(locale[key], `missing Chinese translation for ${key}`)
+      assert.notEqual(locale[key], key, `untranslated Chinese key: ${key}`)
+    }
+  })
+
+  test('maps stored system messages and receipt states to locale keys', () => {
+    assert.deepEqual(
+      corporateTransferLocalizedText('cancelled by user before payment'),
+      { key: 'Corporate transfer cancelled before payment' }
+    )
+    assert.deepEqual(
+      corporateTransferLocalizedText('payment evidence deadline expired'),
+      { key: 'Payment evidence deadline expired' }
+    )
+    assert.deepEqual(corporateTransferLocalizedText('工单已由管理员关闭。'), {
+      key: 'Ticket closed by administrator',
+    })
+    assert.equal(corporateTransferReceiptStatusKey('active'), 'Valid')
+    assert.equal(corporateTransferReceiptStatusKey('voided'), 'Voided')
+  })
+
   test('presents participant labels relative to the current viewer', () => {
     assert.equal(corporateTicketParticipantKey(message('user'), 'user'), 'Me')
     assert.equal(

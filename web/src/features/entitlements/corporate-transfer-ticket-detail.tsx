@@ -20,6 +20,7 @@ import {
   CorporateTransferReviewResult,
 } from './components/corporate-transfer-conversation'
 import { CorporateTransferReplyComposer } from './components/corporate-transfer-reply-composer'
+import { corporateTransferTicketTitle } from './corporate-transfer-conversation'
 import { corporateTransferIsTerminal } from './corporate-transfer-status'
 
 interface CorporateTransferTicketDetailProps {
@@ -56,6 +57,7 @@ function EvidenceAction(props: {
         ref={props.inputRef}
         className='sr-only'
         type='file'
+        aria-label={t('Choose payment evidence')}
         accept='image/jpeg,image/png,image/webp'
         multiple
         onChange={(event) => addFiles([...(event.target.files ?? [])])}
@@ -215,6 +217,9 @@ export function CorporateTransferTicketDetail(
       </SectionPageLayout>
     )
   }
+  const localizedTitle = corporateTransferTicketTitle(
+    detail.data.data.ticket.subject
+  )
   const terminal = corporateTransferIsTerminal(application.status)
   const canUpload =
     application.status === 'awaiting_evidence' ||
@@ -312,7 +317,9 @@ export function CorporateTransferTicketDetail(
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
-        {detail.data.data.ticket.subject}
+        {localizedTitle
+          ? t(localizedTitle.key, localizedTitle.values)
+          : detail.data.data.ticket.subject}
       </SectionPageLayout.Title>
       <SectionPageLayout.Actions>
         <Button variant='outline' onClick={() => navigate({ to: '/tickets' })}>

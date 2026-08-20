@@ -40,6 +40,7 @@ import {
   uploadCorporateCollectionAsset,
   voidCorporateReceipt,
 } from '../api'
+import { corporateTransferReceiptStatusKey } from '../corporate-transfer-conversation'
 import { corporateTransferStatusKey } from '../corporate-transfer-status'
 import type {
   CorporateCollectionChannel,
@@ -670,7 +671,7 @@ function TransferReviewDetail(props: {
                     ¥{(receipt.amount_cents / 100).toFixed(2)}
                   </span>
                   <Badge className='ml-3' variant='secondary'>
-                    {t(receipt.status)}
+                    {t(corporateTransferReceiptStatusKey(receipt.status))}
                   </Badge>
                 </div>
                 {receipt.status === 'active' &&
@@ -842,7 +843,7 @@ export function AdminCorporateTransfer() {
               </NativeSelectOption>
             </NativeSelect>
             <Badge variant='secondary'>
-              {t('{{count}} applications', {
+              {t('Applications: {{count}}', {
                 count: applications.data?.data?.total ?? 0,
               })}
             </Badge>

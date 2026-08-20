@@ -55,6 +55,7 @@ export function CorporateTransferReplyComposer(props: {
         ref={inputRef}
         className='sr-only'
         type='file'
+        aria-label={t('Select reply images')}
         accept='image/jpeg,image/png,image/webp'
         multiple
         onChange={(event) => addFiles([...(event.target.files ?? [])])}

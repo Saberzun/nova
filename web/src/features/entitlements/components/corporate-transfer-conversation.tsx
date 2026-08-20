@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import {
   corporateTicketParticipantKey,
+  corporateTransferLocalizedText,
   partitionCorporateTicketAttachments,
   type CorporateTicketViewerRole,
 } from '../corporate-transfer-conversation'
@@ -198,6 +199,7 @@ export function CorporateTransferMessageList(props: {
         const label = t(
           corporateTicketParticipantKey(message, props.viewerRole)
         )
+        const localizedBody = corporateTransferLocalizedText(message.body)
         let bubbleClassName = 'bg-muted'
         if (mine) {
           bubbleClassName = 'bg-primary text-primary-foreground'
@@ -219,7 +221,11 @@ export function CorporateTransferMessageList(props: {
                 <span>{formatDate(message.created_at)}</span>
               </div>
               {message.body ? (
-                <p className='text-sm whitespace-pre-wrap'>{message.body}</p>
+                <p className='text-sm whitespace-pre-wrap'>
+                  {localizedBody
+                    ? t(localizedBody.key, localizedBody.values)
+                    : message.body}
+                </p>
               ) : null}
               {attachments.evidence.length > 0 ? (
                 <div className='bg-background text-foreground space-y-3 rounded-xl border p-3'>
@@ -300,6 +306,9 @@ export function CorporateTransferReviewResult(props: {
   application: CorporateTransferApplication
 }) {
   const { t } = useTranslation()
+  const localizedReason = corporateTransferLocalizedText(
+    props.application.user_visible_reason
+  )
   if (
     props.application.status === 'awaiting_evidence' ||
     props.application.status === 'under_review'
@@ -321,7 +330,9 @@ export function CorporateTransferReviewResult(props: {
           </div>
           {props.application.user_visible_reason ? (
             <p className='bg-muted/50 rounded-lg p-3 whitespace-pre-wrap'>
-              {props.application.user_visible_reason}
+              {localizedReason
+                ? t(localizedReason.key, localizedReason.values)
+                : props.application.user_visible_reason}
             </p>
           ) : null}
         </CardContent>

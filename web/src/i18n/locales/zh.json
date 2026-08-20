@@ -5688,6 +5688,25 @@
     "You can paste or drop images here": "可以粘贴或拖入图片",
     "Add internal note": "添加内部备注",
     "Review result": "审核结果",
-    "Uploaded by": "上传方"
+    "Uploaded by": "上传方",
+    "Verify receipts against the actual collection account before fulfillment.": "发放权益前，请务必根据实际收款账户核验到账记录。",
+    "User-visible reason for more information or rejection": "请输入向用户展示的补充信息或拒绝原因",
+    "Applications: {{count}}": "申请单：{{count}} 个",
+    "Select reply images": "选择回复图片",
+    "Order created. Complete the transfer and upload payment evidence.": "订单已创建，请完成转账后上传支付凭证。",
+    "Corporate transfer cancelled before payment": "用户已在付款前取消对公转账申请。",
+    "Payment evidence deadline expired": "支付凭证提交期限已过，转账申请已关闭。",
+    "Ticket closed by administrator": "工单已由管理员关闭。",
+    "Ticket reopened for communication only; the payment review result is unchanged.": "工单已由管理员重新打开，仅用于继续沟通，不改变支付审核结果。",
+    "Receipt verified for order {{orderNo}}. Amount ¥{{amount}}; entitlement fulfilled.": "到账核验完成：订单 {{orderNo}}，到账金额 ¥{{amount}}，权益已发放。",
+    "Refund registered: ¥{{amount}}, reference {{reference}}.": "退款已登记：¥{{amount}}，退款流水 {{reference}}。",
+    "Corporate transfer evidence: {{orderNo}}": "对公转账凭证：{{orderNo}}",
+    "Valid": "有效",
+    "Voided": "已作废",
+    "Approved": "已批准",
+    "Confirm receipt of {{amount}} and grant the locked entitlement? This cannot be undone directly.": "确认已收到 {{amount}} 并发放已锁定的权益？此操作无法直接撤销。",
+    "Register only after the Enterprise WeChat or bank refund has actually completed.": "仅在企业微信或银行卡退款实际完成后登记。",
+    "Collection information has changed since this application was created. Confirm with an administrator before paying.": "该申请创建后收款信息已发生变化，请在付款前与管理员确认。",
+    "This application is closed. The collection information is retained for audit only; do not transfer money to it.": "该申请已关闭，收款信息仅用于审计，请勿再向其转账。"
   }
 }
