@@ -97,6 +97,10 @@ function CollectionConfiguration() {
   })
   const publish = useMutation({
     mutationFn: async () => {
+      const draftResponse = await saveCorporateCollectionDraft(channels)
+      if (!draftResponse.success) {
+        throw new Error(draftResponse.message || t('Save failed'))
+      }
       const response = await publishCorporateCollection(
         configuration.data?.data?.state.current_revision ?? 0
       )
@@ -329,12 +333,15 @@ function CollectionConfiguration() {
       <div className='flex gap-3'>
         <Button
           variant='outline'
-          disabled={save.isPending}
+          disabled={save.isPending || publish.isPending}
           onClick={() => save.mutate()}
         >
           {t('Save draft')}
         </Button>
-        <Button disabled={publish.isPending} onClick={() => publish.mutate()}>
+        <Button
+          disabled={save.isPending || publish.isPending}
+          onClick={() => publish.mutate()}
+        >
           {t('Publish')}
         </Button>
       </div>
