@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Building2, ImagePlus, Landmark } from 'lucide-react'
+import { Building2, ImagePlus, Landmark, X } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -325,27 +325,65 @@ export function CorporateTransferTicketDetail(
               ))}
               {canUpload ? (
                 <div className='rounded-xl border border-dashed p-4'>
-                  <label className='flex cursor-pointer items-center gap-3 font-medium'>
-                    <ImagePlus className='size-5' />
-                    {t('Select payment evidence')}
-                    <input
-                      ref={evidenceInputRef}
-                      className='sr-only'
-                      type='file'
-                      accept='image/jpeg,image/png,image/webp'
-                      multiple
-                      onChange={(event) =>
-                        setFiles([...(event.target.files ?? [])].slice(0, 5))
-                      }
-                    />
-                  </label>
-                  <p className='text-muted-foreground mt-2 text-xs'>
-                    {t('JPEG, PNG or WebP; up to 5 files and 5MB each')}
-                  </p>
+                  <input
+                    ref={evidenceInputRef}
+                    className='sr-only'
+                    type='file'
+                    accept='image/jpeg,image/png,image/webp'
+                    multiple
+                    onChange={(event) =>
+                      setFiles([...(event.target.files ?? [])].slice(0, 5))
+                    }
+                  />
+                  <div className='flex flex-wrap items-center justify-between gap-3'>
+                    <div>
+                      <p className='font-medium'>{t('Payment evidence')}</p>
+                      <p className='text-muted-foreground mt-1 text-xs'>
+                        {t('JPEG, PNG or WebP; up to 5 files and 5MB each')}
+                      </p>
+                    </div>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      disabled={upload.isPending}
+                      onClick={() => evidenceInputRef.current?.click()}
+                    >
+                      <ImagePlus className='size-4' />
+                      {t('Select payment evidence')}
+                    </Button>
+                  </div>
                   {files.length > 0 ? (
-                    <p className='mt-3 text-sm'>
-                      {files.map((file) => file.name).join(', ')}
-                    </p>
+                    <div className='mt-4 space-y-2'>
+                      <p className='text-muted-foreground text-xs'>
+                        {t('Selected {{count}}', { count: files.length })}
+                      </p>
+                      <div className='grid gap-2 sm:grid-cols-2'>
+                        {files.map((file, index) => (
+                          <div
+                            key={`${file.name}-${file.lastModified}`}
+                            className='bg-muted/50 flex items-center gap-2 rounded-lg px-3 py-2 text-sm'
+                          >
+                            <span className='min-w-0 flex-1 truncate'>
+                              {file.name}
+                            </span>
+                            <button
+                              type='button'
+                              className='text-muted-foreground hover:text-foreground rounded-md p-1'
+                              aria-label={t('Remove')}
+                              onClick={() =>
+                                setFiles((current) =>
+                                  current.filter(
+                                    (_, itemIndex) => itemIndex !== index
+                                  )
+                                )
+                              }
+                            >
+                              <X className='size-4' />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ) : null}
                   <Button
                     className='mt-4'
