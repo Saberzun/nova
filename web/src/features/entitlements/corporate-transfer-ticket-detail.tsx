@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Building2, ImagePlus, Landmark } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -99,6 +99,7 @@ export function CorporateTransferTicketDetail(
   const queryClient = useQueryClient()
   const [files, setFiles] = useState<File[]>([])
   const [reply, setReply] = useState('')
+  const evidenceInputRef = useRef<HTMLInputElement>(null)
   const detail = useQuery({
     queryKey: ['corporate-transfer', 'ticket', props.ticketNo],
     queryFn: () => getCorporateTransferTicket(props.ticketNo),
@@ -290,31 +291,36 @@ export function CorporateTransferTicketDetail(
             </CardHeader>
             <CardContent className='space-y-5'>
               {detail.data.data.messages.map((message) => (
-                <div key={message.id} className='rounded-xl border p-4'>
-                  <div className='flex items-center justify-between gap-3'>
-                    <Badge variant='outline'>{t(message.sender_role)}</Badge>
-                    <span className='text-muted-foreground text-xs'>
-                      {formatDate(message.created_at)}
-                    </span>
-                  </div>
-                  {message.body ? (
-                    <p className='mt-3 text-sm whitespace-pre-wrap'>
-                      {message.body}
-                    </p>
-                  ) : null}
-                  {(message.attachments ?? []).length > 0 ? (
-                    <div className='mt-4 grid gap-4 sm:grid-cols-2'>
-                      {message.attachments?.map((attachment) => (
-                        <AuthenticatedCorporateImage
-                          key={attachment.id}
-                          path={`/api/store/corporate-transfers/attachments/${attachment.id}`}
-                          alt={attachment.original_name}
-                          className='max-h-[560px] w-full rounded-xl border bg-black/5 object-contain'
-                          openOriginal
-                        />
-                      ))}
+                <div
+                  key={message.id}
+                  className={`flex ${message.sender_role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`w-full max-w-[min(92%,42rem)] space-y-2 rounded-2xl px-4 py-3 ${message.sender_role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
+                  >
+                    <div className='flex items-center justify-between gap-3 text-xs opacity-75'>
+                      <span>{t(message.sender_role)}</span>
+                      <span>{formatDate(message.created_at)}</span>
                     </div>
-                  ) : null}
+                    {message.body ? (
+                      <p className='text-sm whitespace-pre-wrap'>
+                        {message.body}
+                      </p>
+                    ) : null}
+                    {(message.attachments ?? []).length > 0 ? (
+                      <div className='grid gap-4 sm:grid-cols-2'>
+                        {message.attachments?.map((attachment) => (
+                          <AuthenticatedCorporateImage
+                            key={attachment.id}
+                            path={`/api/store/corporate-transfers/attachments/${attachment.id}`}
+                            alt={attachment.original_name}
+                            className='max-h-[560px] w-full rounded-xl border bg-black/5 object-contain'
+                            openOriginal
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ))}
               {canUpload ? (
@@ -323,6 +329,7 @@ export function CorporateTransferTicketDetail(
                     <ImagePlus className='size-5' />
                     {t('Select payment evidence')}
                     <input
+                      ref={evidenceInputRef}
                       className='sr-only'
                       type='file'
                       accept='image/jpeg,image/png,image/webp'
@@ -342,8 +349,14 @@ export function CorporateTransferTicketDetail(
                   ) : null}
                   <Button
                     className='mt-4'
-                    disabled={files.length === 0 || upload.isPending}
-                    onClick={() => upload.mutate()}
+                    disabled={upload.isPending}
+                    onClick={() => {
+                      if (files.length === 0) {
+                        evidenceInputRef.current?.click()
+                        return
+                      }
+                      upload.mutate()
+                    }}
                   >
                     {t('Submit payment evidence')}
                   </Button>
