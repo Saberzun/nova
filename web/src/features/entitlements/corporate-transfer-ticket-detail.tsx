@@ -18,6 +18,7 @@ import {
   replyCorporateTransferTicket,
   uploadCorporateTransferEvidence,
 } from './api'
+import { AuthenticatedCorporateImage } from './components/authenticated-corporate-image'
 import {
   corporateTransferIsTerminal,
   corporateTransferStatusKey,
@@ -39,8 +40,8 @@ function CollectionChannelCard(props: { channel: CorporateCollectionChannel }) {
           {props.channel.organization_name}
         </div>
         {props.channel.qr_code_attachment_id ? (
-          <img
-            src={`/api/store/corporate-transfers/collection-assets/${props.channel.qr_code_attachment_id}`}
+          <AuthenticatedCorporateImage
+            path={`/api/store/corporate-transfers/collection-assets/${props.channel.qr_code_attachment_id}`}
             alt={t('Enterprise WeChat collection QR code')}
             className='mx-auto max-h-96 max-w-full rounded-xl border object-contain'
           />
@@ -304,18 +305,13 @@ export function CorporateTransferTicketDetail(
                   {(message.attachments ?? []).length > 0 ? (
                     <div className='mt-4 grid gap-4 sm:grid-cols-2'>
                       {message.attachments?.map((attachment) => (
-                        <a
+                        <AuthenticatedCorporateImage
                           key={attachment.id}
-                          href={`/api/store/corporate-transfers/attachments/${attachment.id}`}
-                          target='_blank'
-                          rel='noreferrer'
-                        >
-                          <img
-                            src={`/api/store/corporate-transfers/attachments/${attachment.id}`}
-                            alt={attachment.original_name}
-                            className='max-h-[560px] w-full rounded-xl border bg-black/5 object-contain'
-                          />
-                        </a>
+                          path={`/api/store/corporate-transfers/attachments/${attachment.id}`}
+                          alt={attachment.original_name}
+                          className='max-h-[560px] w-full rounded-xl border bg-black/5 object-contain'
+                          openOriginal
+                        />
                       ))}
                     </div>
                   ) : null}

@@ -34,6 +34,7 @@ import type {
   CorporateCollectionChannel,
   CorporateTransferApplication,
 } from '../types'
+import { AuthenticatedCorporateImage } from './authenticated-corporate-image'
 
 const defaultChannels: CorporateCollectionChannel[] = [
   {
@@ -207,8 +208,8 @@ function CollectionConfiguration() {
               />
             </label>
             {wechat.qr_code_attachment_id ? (
-              <img
-                src={`/api/store/corporate-transfers/collection-assets/${wechat.qr_code_attachment_id}`}
+              <AuthenticatedCorporateImage
+                path={`/api/store/corporate-transfers/collection-assets/${wechat.qr_code_attachment_id}`}
                 alt={t('Enterprise WeChat collection QR code')}
                 className='max-h-64 rounded-xl border object-contain'
               />
