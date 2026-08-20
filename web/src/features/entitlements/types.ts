@@ -369,6 +369,7 @@ export interface SupportTicket {
 
 export interface SupportTicketAttachment {
   id: number
+  kind: 'payment_evidence' | 'reply' | ''
   original_name: string
   content_type: string
   byte_size: number

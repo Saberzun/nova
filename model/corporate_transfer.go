@@ -34,6 +34,9 @@ const (
 	TicketSenderUser   = "user"
 	TicketSenderAdmin  = "admin"
 	TicketSenderSystem = "system"
+
+	TicketAttachmentKindPaymentEvidence = "payment_evidence"
+	TicketAttachmentKindReply           = "reply"
 )
 
 var (
@@ -148,6 +151,7 @@ type SupportTicketAttachment struct {
 	TicketId     int    `json:"ticket_id" gorm:"index;not null"`
 	MessageId    int    `json:"message_id" gorm:"index;not null"`
 	UploaderId   int    `json:"uploader_id" gorm:"index;not null"`
+	Kind         string `json:"kind" gorm:"type:varchar(32);index"`
 	StorageKey   string `json:"-" gorm:"type:varchar(255);uniqueIndex;not null"`
 	OriginalName string `json:"original_name" gorm:"type:varchar(255);not null"`
 	ContentType  string `json:"content_type" gorm:"type:varchar(64);not null"`
@@ -737,7 +741,10 @@ func SubmitCorporateTransferEvidence(applicationNo string, userId int, body stri
 			return errors.New("corporate transfer is not accepting evidence")
 		}
 		var existingCount int64
-		if err := tx.Model(&SupportTicketAttachment{}).Where("ticket_id = ?", application.TicketId).Count(&existingCount).Error; err != nil {
+		if err := tx.Model(&SupportTicketAttachment{}).
+			Where("ticket_id = ?", application.TicketId).
+			Where("kind = ? OR kind = ? OR kind IS NULL", "", TicketAttachmentKindPaymentEvidence).
+			Count(&existingCount).Error; err != nil {
 			return err
 		}
 		if len(attachments) == 0 || len(attachments) > 5 || existingCount+int64(len(attachments)) > 10 {
@@ -748,6 +755,7 @@ func SubmitCorporateTransferEvidence(applicationNo string, userId int, body stri
 			return err
 		}
 		for index := range attachments {
+			attachments[index].Kind = TicketAttachmentKindPaymentEvidence
 			attachments[index].TicketId = application.TicketId
 			attachments[index].MessageId = message.Id
 			attachments[index].UploaderId = userId
@@ -768,34 +776,70 @@ func SubmitCorporateTransferEvidence(applicationNo string, userId int, body stri
 	return &message, nil
 }
 
-func AppendCorporateTransferTicketMessage(applicationNo string, senderId int, senderRole string, body string, internal bool) (*SupportTicketMessage, error) {
+func AppendCorporateTransferTicketMessage(applicationNo string, senderId int, senderRole string, body string, internal bool, attachments []SupportTicketAttachment) (*SupportTicketMessage, error) {
 	body = strings.TrimSpace(body)
-	if body == "" || len([]rune(body)) > 5000 {
+	if (body == "" && len(attachments) == 0) || len([]rune(body)) > 5000 || len(attachments) > 5 {
 		return nil, errors.New("invalid ticket message")
 	}
-	var application CorporateTransferApplication
-	query := DB.Where("application_no = ?", strings.TrimSpace(applicationNo))
-	if senderRole == TicketSenderUser {
-		query = query.Where("user_id = ?", senderId)
-		internal = false
-	}
-	if err := query.First(&application).Error; err != nil {
+	returnMessage := &SupportTicketMessage{}
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var application CorporateTransferApplication
+		query := lockForUpdate(tx).Where("application_no = ?", strings.TrimSpace(applicationNo))
+		if senderRole == TicketSenderUser {
+			query = query.Where("user_id = ?", senderId)
+			internal = false
+		}
+		if err := query.First(&application).Error; err != nil {
+			return err
+		}
+		var ticket SupportTicket
+		if err := lockForUpdate(tx).Where("id = ?", application.TicketId).First(&ticket).Error; err != nil {
+			return err
+		}
+		now := getDBTimestampTx(tx)
+		message := SupportTicketMessage{TicketId: application.TicketId, SenderUserId: senderId, SenderRole: senderRole, Body: body, Internal: internal}
+		if err := tx.Create(&message).Error; err != nil {
+			return err
+		}
+		for index := range attachments {
+			attachments[index].Kind = TicketAttachmentKindReply
+			attachments[index].TicketId = application.TicketId
+			attachments[index].MessageId = message.Id
+			attachments[index].UploaderId = senderId
+			if err := tx.Create(&attachments[index]).Error; err != nil {
+				return err
+			}
+		}
+		updates := map[string]interface{}{"updated_at": now}
+		if ticket.Status != TicketStatusOpen {
+			updates["status"] = TicketStatusOpen
+			updates["closed_at"] = 0
+		}
+		if err := tx.Model(&ticket).Updates(updates).Error; err != nil {
+			return err
+		}
+		message.Attachments = attachments
+		*returnMessage = message
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	var ticket SupportTicket
-	if err := DB.Where("id = ?", application.TicketId).First(&ticket).Error; err != nil {
+	return returnMessage, nil
+}
+
+func GetCorporateTransferAttachmentForUser(id int, userId int) (*SupportTicketAttachment, error) {
+	var attachment SupportTicketAttachment
+	err := DB.Model(&SupportTicketAttachment{}).
+		Joins("JOIN support_ticket_messages ON support_ticket_messages.id = support_ticket_attachments.message_id").
+		Joins("JOIN support_tickets ON support_tickets.id = support_ticket_attachments.ticket_id").
+		Where("support_ticket_attachments.id = ? AND support_ticket_attachments.purged_at = ?", id, 0).
+		Where("support_tickets.user_id = ? AND support_ticket_messages.internal = ?", userId, false).
+		First(&attachment).Error
+	if err != nil {
 		return nil, err
 	}
-	terminal := application.Status == CorporateTransferCancelled || application.Status == CorporateTransferExpired || application.Status == CorporateTransferRejected || application.Status == CorporateTransferFulfilled
-	if ticket.Status != TicketStatusOpen || (terminal && senderRole != TicketSenderAdmin) {
-		return nil, errors.New("closed corporate transfer ticket does not accept replies")
-	}
-	message := SupportTicketMessage{TicketId: application.TicketId, SenderUserId: senderId, SenderRole: senderRole, Body: body, Internal: internal}
-	if err := DB.Create(&message).Error; err != nil {
-		return nil, err
-	}
-	_ = DB.Model(&SupportTicket{}).Where("id = ?", application.TicketId).Update("updated_at", corporateTimestamp()).Error
-	return &message, nil
+	return &attachment, nil
 }
 
 func SetCorporateTransferTicketOpen(applicationNo string, adminId int, open bool) error {

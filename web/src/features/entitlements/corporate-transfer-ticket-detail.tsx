@@ -1,16 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Building2, ImagePlus, Landmark, X } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { ImagePlus, X } from 'lucide-react'
+import { useRef, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { SectionPageLayout } from '@/components/layout'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
 
 import {
   cancelCorporateTransfer,
@@ -18,76 +14,102 @@ import {
   replyCorporateTransferTicket,
   uploadCorporateTransferEvidence,
 } from './api'
-import { AuthenticatedCorporateImage } from './components/authenticated-corporate-image'
 import {
-  corporateTransferIsTerminal,
-  corporateTransferStatusKey,
-} from './corporate-transfer-status'
-import { formatDate } from './lib'
-import type { CorporateCollectionChannel } from './types'
+  CorporateTransferMessageList,
+  CorporateTransferPaymentPrompt,
+  CorporateTransferReviewResult,
+} from './components/corporate-transfer-conversation'
+import { CorporateTransferReplyComposer } from './components/corporate-transfer-reply-composer'
+import { corporateTransferIsTerminal } from './corporate-transfer-status'
 
 interface CorporateTransferTicketDetailProps {
   ticketNo: string
   embedded?: boolean
 }
 
-function CollectionChannelCard(props: { channel: CorporateCollectionChannel }) {
+function EvidenceAction(props: {
+  files: File[]
+  setFiles: (files: File[]) => void
+  inputRef: RefObject<HTMLInputElement | null>
+  onSubmit: () => void
+  pending: boolean
+}) {
   const { t } = useTranslation()
-  if (props.channel.channel_type === 'enterprise_wechat') {
-    return (
-      <div className='space-y-4 rounded-xl border p-5'>
-        <div className='flex items-center gap-2 font-medium'>
-          <Building2 className='size-5' />
-          {props.channel.organization_name}
-        </div>
-        {props.channel.qr_code_attachment_id ? (
-          <AuthenticatedCorporateImage
-            path={`/api/store/corporate-transfers/collection-assets/${props.channel.qr_code_attachment_id}`}
-            alt={t('Enterprise WeChat collection QR code')}
-            className='mx-auto max-h-96 max-w-full rounded-xl border object-contain'
-          />
-        ) : null}
-        {props.channel.instructions ? (
-          <p className='text-muted-foreground text-sm whitespace-pre-wrap'>
-            {props.channel.instructions}
-          </p>
-        ) : null}
-      </div>
+  const addFiles = (incoming: File[]) => {
+    props.setFiles(
+      [
+        ...props.files,
+        ...incoming.filter((file) => file.type.startsWith('image/')),
+      ].slice(0, 5)
     )
   }
   return (
-    <div className='space-y-3 rounded-xl border p-5'>
-      <div className='flex items-center gap-2 font-medium'>
-        <Landmark className='size-5' />
-        {props.channel.organization_name}
+    <div
+      className='rounded-xl border border-dashed p-4'
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault()
+        addFiles([...event.dataTransfer.files])
+      }}
+    >
+      <input
+        ref={props.inputRef}
+        className='sr-only'
+        type='file'
+        accept='image/jpeg,image/png,image/webp'
+        multiple
+        onChange={(event) => addFiles([...(event.target.files ?? [])])}
+      />
+      <div className='flex flex-wrap items-center justify-between gap-3'>
+        <div>
+          <p className='font-medium'>{t('Upload payment evidence')}</p>
+          <p className='text-muted-foreground mt-1 text-xs'>
+            {t(
+              'JPEG, PNG or WebP; up to 5 files and 5MB each. You can also drag images here.'
+            )}
+          </p>
+        </div>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={props.pending}
+          onClick={() => props.inputRef.current?.click()}
+        >
+          <ImagePlus className='size-4' aria-hidden='true' />
+          {t('Choose payment evidence')}
+        </Button>
       </div>
-      <dl className='grid gap-3 text-sm sm:grid-cols-2'>
-        <div>
-          <dt className='text-muted-foreground'>{t('Account name')}</dt>
-          <dd className='mt-1 font-medium'>{props.channel.account_name}</dd>
+      {props.files.length > 0 ? (
+        <div className='mt-4 grid gap-2 sm:grid-cols-2'>
+          {props.files.map((file, index) => (
+            <div
+              key={`${file.name}-${file.lastModified}`}
+              className='bg-muted/50 flex items-center gap-2 rounded-lg px-3 py-2 text-sm'
+            >
+              <span className='min-w-0 flex-1 truncate'>{file.name}</span>
+              <button
+                type='button'
+                className='text-muted-foreground hover:text-foreground rounded-md p-1'
+                aria-label={t('Remove')}
+                onClick={() =>
+                  props.setFiles(
+                    props.files.filter((_, itemIndex) => itemIndex !== index)
+                  )
+                }
+              >
+                <X className='size-4' aria-hidden='true' />
+              </button>
+            </div>
+          ))}
         </div>
-        <div>
-          <dt className='text-muted-foreground'>{t('Bank name')}</dt>
-          <dd className='mt-1 font-medium'>{props.channel.bank_name}</dd>
-        </div>
-        <div>
-          <dt className='text-muted-foreground'>{t('Bank account')}</dt>
-          <dd className='mt-1 font-mono font-medium'>
-            {props.channel.bank_account}
-          </dd>
-        </div>
-        <div>
-          <dt className='text-muted-foreground'>{t('Bank branch')}</dt>
-          <dd className='mt-1 font-medium'>
-            {props.channel.bank_branch || '—'}
-          </dd>
-        </div>
-      </dl>
-      {props.channel.instructions ? (
-        <p className='text-muted-foreground text-sm whitespace-pre-wrap'>
-          {props.channel.instructions}
-        </p>
       ) : null}
+      <Button
+        className='mt-4'
+        disabled={props.pending || props.files.length === 0}
+        onClick={props.onSubmit}
+      >
+        {t('Submit payment evidence')}
+      </Button>
     </div>
   )
 }
@@ -98,7 +120,8 @@ export function CorporateTransferTicketDetail(
   const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [files, setFiles] = useState<File[]>([])
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
+  const [replyFiles, setReplyFiles] = useState<File[]>([])
   const [reply, setReply] = useState('')
   const evidenceInputRef = useRef<HTMLInputElement>(null)
   const detail = useQuery({
@@ -106,13 +129,6 @@ export function CorporateTransferTicketDetail(
     queryFn: () => getCorporateTransferTicket(props.ticketNo),
   })
   const application = detail.data?.data?.application
-  const enabledChannels = useMemo(
-    () =>
-      detail.data?.data?.collection.channels.filter(
-        (channel) => channel.enabled
-      ) ?? [],
-    [detail.data?.data?.collection.channels]
-  )
   const refresh = async () => {
     await queryClient.invalidateQueries({
       queryKey: ['corporate-transfer', 'ticket', props.ticketNo],
@@ -120,20 +136,28 @@ export function CorporateTransferTicketDetail(
     await queryClient.invalidateQueries({
       queryKey: ['corporate-transfer', 'tickets'],
     })
+    await queryClient.invalidateQueries({
+      queryKey: ['corporate-transfer', 'unread'],
+    })
+    await queryClient.invalidateQueries({
+      queryKey: ['entitlement-store', 'orders'],
+    })
   }
   const upload = useMutation({
     mutationFn: async () => {
-      if (!application) throw new Error(t('Ticket is unavailable'))
+      if (!application) {
+        throw new Error(t('Ticket is unavailable'))
+      }
       const response = await uploadCorporateTransferEvidence(
         application.application_no,
-        files
+        evidenceFiles
       )
       if (!response.success) {
         throw new Error(response.message || t('Upload failed'))
       }
     },
     onSuccess: async () => {
-      setFiles([])
+      setEvidenceFiles([])
       await refresh()
       toast.success(t('Payment evidence submitted'))
     },
@@ -141,10 +165,13 @@ export function CorporateTransferTicketDetail(
   })
   const sendReply = useMutation({
     mutationFn: async () => {
-      if (!application) throw new Error(t('Ticket is unavailable'))
+      if (!application) {
+        throw new Error(t('Ticket is unavailable'))
+      }
       const response = await replyCorporateTransferTicket(
         application.application_no,
-        reply
+        reply,
+        replyFiles
       )
       if (!response.success) {
         throw new Error(response.message || t('Reply failed'))
@@ -152,6 +179,7 @@ export function CorporateTransferTicketDetail(
     },
     onSuccess: async () => {
       setReply('')
+      setReplyFiles([])
       await refresh()
     },
     onError: (error) => toast.error(error.message),
@@ -187,256 +215,100 @@ export function CorporateTransferTicketDetail(
       </SectionPageLayout>
     )
   }
+  const terminal = corporateTransferIsTerminal(application.status)
   const canUpload =
     application.status === 'awaiting_evidence' ||
     application.status === 'needs_more_information'
-  const canReply = !corporateTransferIsTerminal(application.status)
-
-  const content = (
-    <div
-      className={props.embedded ? 'space-y-5' : 'mx-auto max-w-5xl space-y-5'}
-    >
-      <Card>
-        <CardContent className='grid gap-4 pt-6 sm:grid-cols-2 lg:grid-cols-4'>
-          <div>
-            <p className='text-muted-foreground text-xs'>
-              {t('Application number')}
-            </p>
-            <p className='mt-1 font-mono text-sm'>
-              {application.application_no}
-            </p>
-          </div>
-          <div>
-            <p className='text-muted-foreground text-xs'>{t('Order number')}</p>
-            <p className='mt-1 font-mono text-sm'>
-              {application.order?.order_no}
-            </p>
-          </div>
-          <div>
-            <p className='text-muted-foreground text-xs'>{t('Status')}</p>
-            <Badge className='mt-1' variant='secondary'>
-              {t(corporateTransferStatusKey(application.status))}
-            </Badge>
-          </div>
-          <div>
-            <p className='text-muted-foreground text-xs'>{t('Cash payable')}</p>
-            <p className='mt-1 font-semibold'>
-              {new Intl.NumberFormat(undefined, {
-                style: 'currency',
-                currency: 'CNY',
-              }).format((application.order?.cash_payable_cents ?? 0) / 100)}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('Payment channels')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {detail.data.data.collection_outdated &&
-          !corporateTransferIsTerminal(application.status) ? (
-            <p className='mb-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-300'>
-              {t(
-                'Collection information has changed since this application was created. Confirm with an administrator before paying.'
-              )}
-            </p>
-          ) : null}
-          {corporateTransferIsTerminal(application.status) ? (
-            <p className='border-destructive/40 bg-destructive/5 text-destructive mb-4 rounded-xl border p-3 text-sm font-medium'>
-              {t(
-                'This application is closed. The collection information is retained for audit only; do not transfer money to it.'
-              )}
-            </p>
-          ) : null}
-          <Tabs defaultValue={enabledChannels[0]?.channel_type}>
-            <TabsList>
-              {enabledChannels.map((channel) => (
-                <TabsTrigger
-                  key={channel.channel_type}
-                  value={channel.channel_type}
-                >
-                  {channel.channel_type === 'enterprise_wechat'
-                    ? t('Enterprise WeChat')
-                    : t('Bank transfer')}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {enabledChannels.map((channel) => (
-              <TabsContent
-                key={channel.channel_type}
-                value={channel.channel_type}
-                className='pt-4'
-              >
-                <CollectionChannelCard channel={channel} />
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('Payment evidence and messages')}</CardTitle>
-        </CardHeader>
-        <CardContent className='space-y-5'>
-          {detail.data.data.messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.sender_role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`w-full max-w-[min(92%,42rem)] space-y-2 rounded-2xl px-4 py-3 ${message.sender_role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
-              >
-                <div className='flex items-center justify-between gap-3 text-xs opacity-75'>
-                  <span>{t(message.sender_role)}</span>
-                  <span>{formatDate(message.created_at)}</span>
-                </div>
-                {message.body ? (
-                  <p className='text-sm whitespace-pre-wrap'>{message.body}</p>
-                ) : null}
-                {(message.attachments ?? []).length > 0 ? (
-                  <div className='grid gap-4 sm:grid-cols-2'>
-                    {message.attachments?.map((attachment) => (
-                      <AuthenticatedCorporateImage
-                        key={attachment.id}
-                        path={`/api/store/corporate-transfers/attachments/${attachment.id}`}
-                        alt={attachment.original_name}
-                        className='max-h-[560px] w-full rounded-xl border bg-black/5 object-contain'
-                        openOriginal
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ))}
-          {canUpload ? (
-            <div className='rounded-xl border border-dashed p-4'>
-              <input
-                ref={evidenceInputRef}
-                className='sr-only'
-                type='file'
-                accept='image/jpeg,image/png,image/webp'
-                multiple
-                onChange={(event) =>
-                  setFiles([...(event.target.files ?? [])].slice(0, 5))
-                }
-              />
-              <div className='flex flex-wrap items-center justify-between gap-3'>
-                <div>
-                  <p className='font-medium'>{t('Payment evidence')}</p>
-                  <p className='text-muted-foreground mt-1 text-xs'>
-                    {t('JPEG, PNG or WebP; up to 5 files and 5MB each')}
-                  </p>
-                </div>
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={upload.isPending}
-                  onClick={() => evidenceInputRef.current?.click()}
-                >
-                  <ImagePlus className='size-4' />
-                  {t('Select payment evidence')}
-                </Button>
-              </div>
-              {files.length > 0 ? (
-                <div className='mt-4 space-y-2'>
-                  <p className='text-muted-foreground text-xs'>
-                    {t('Selected {{count}}', { count: files.length })}
-                  </p>
-                  <div className='grid gap-2 sm:grid-cols-2'>
-                    {files.map((file, index) => (
-                      <div
-                        key={`${file.name}-${file.lastModified}`}
-                        className='bg-muted/50 flex items-center gap-2 rounded-lg px-3 py-2 text-sm'
-                      >
-                        <span className='min-w-0 flex-1 truncate'>
-                          {file.name}
-                        </span>
-                        <button
-                          type='button'
-                          className='text-muted-foreground hover:text-foreground rounded-md p-1'
-                          aria-label={t('Remove')}
-                          onClick={() =>
-                            setFiles((current) =>
-                              current.filter(
-                                (_, itemIndex) => itemIndex !== index
-                              )
-                            )
-                          }
-                        >
-                          <X className='size-4' />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              <Button
-                className='mt-4'
-                disabled={upload.isPending}
-                onClick={() => {
-                  if (files.length === 0) {
-                    evidenceInputRef.current?.click()
-                    return
-                  }
-                  upload.mutate()
-                }}
-              >
-                {t('Submit payment evidence')}
-              </Button>
-            </div>
-          ) : null}
-          {canReply ? (
-            <div className='space-y-3'>
-              <Textarea
-                value={reply}
-                maxLength={5000}
-                onChange={(event) => setReply(event.target.value)}
-                placeholder={t('Reply to administrator')}
-              />
-              <Button
-                variant='outline'
-                disabled={!reply.trim() || sendReply.isPending}
-                onClick={() => sendReply.mutate()}
-              >
-                {t('Send reply')}
-              </Button>
-            </div>
-          ) : null}
-          {application.status === 'awaiting_evidence' ? (
-            <Button
-              variant='destructive'
-              disabled={cancel.isPending}
-              onClick={() => cancel.mutate()}
-            >
-              {t('Cancel unpaid application')}
-            </Button>
-          ) : null}
-          {['cancelled', 'expired', 'rejected'].includes(application.status) ? (
-            <Button
-              variant='outline'
-              onClick={async () => {
-                if (application.order?.order_no) {
-                  sessionStorage.setItem(
-                    'corporate-transfer-prior-order',
-                    application.order.order_no
-                  )
-                }
-                await navigate({ to: '/store' })
-              }}
-            >
-              {t('Create a new order')}
-            </Button>
-          ) : null}
-        </CardContent>
-      </Card>
+  const canReply = true
+  const composer = canReply ? (
+    <CorporateTransferReplyComposer
+      value={reply}
+      files={replyFiles}
+      pending={sendReply.isPending}
+      placeholder={t('Reply to administrator')}
+      onValueChange={setReply}
+      onFilesChange={setReplyFiles}
+      onSubmit={() => sendReply.mutate()}
+      submitLabel={t('Send reply')}
+    />
+  ) : null
+  const conversation = (
+    <div className='space-y-5'>
+      <CorporateTransferPaymentPrompt
+        application={application}
+        collection={detail.data.data.collection}
+        collectionOutdated={detail.data.data.collection_outdated}
+        terminal={terminal}
+        evidenceAction={
+          canUpload ? (
+            <EvidenceAction
+              files={evidenceFiles}
+              setFiles={setEvidenceFiles}
+              inputRef={evidenceInputRef}
+              onSubmit={() => upload.mutate()}
+              pending={upload.isPending}
+            />
+          ) : null
+        }
+      />
+      <div className='space-y-4'>
+        <CorporateTransferMessageList
+          messages={detail.data.data.messages}
+          viewerRole='user'
+          application={application}
+        />
+        <CorporateTransferReviewResult application={application} />
+        {detail.data.data.ticket.status === 'closed' && canReply ? (
+          <p className='rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-300'>
+            {t(
+              'This ticket is closed. Your reply will automatically reopen it.'
+            )}
+          </p>
+        ) : null}
+        {application.status === 'awaiting_evidence' ? (
+          <Button
+            variant='destructive'
+            disabled={cancel.isPending}
+            onClick={() => cancel.mutate()}
+          >
+            {t('Cancel unpaid application')}
+          </Button>
+        ) : null}
+        {['cancelled', 'expired', 'rejected'].includes(application.status) ? (
+          <Button
+            variant='outline'
+            onClick={async () => {
+              if (application.order?.order_no) {
+                sessionStorage.setItem(
+                  'corporate-transfer-prior-order',
+                  application.order.order_no
+                )
+              }
+              await navigate({ to: '/store' })
+            }}
+          >
+            {t('Create a new order')}
+          </Button>
+        ) : null}
+      </div>
     </div>
   )
-  if (props.embedded) return content
-
+  if (props.embedded) {
+    return (
+      <div className='flex h-full min-h-0 flex-col gap-4'>
+        <div className='min-h-0 flex-1 overflow-y-auto pr-1'>
+          {conversation}
+        </div>
+        <div className='shrink-0'>{composer}</div>
+      </div>
+    )
+  }
+  const content = (
+    <div className='mx-auto max-w-3xl space-y-5'>
+      {conversation}
+      {composer}
+    </div>
+  )
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>

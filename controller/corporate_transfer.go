@@ -270,13 +270,57 @@ type ticketReplyRequest struct {
 	Internal bool   `json:"internal"`
 }
 
-func ReplyCorporateTransferTicket(c *gin.Context) {
-	var request ticketReplyRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		common.ApiError(c, err)
-		return
+func appendCorporateTransferReply(c *gin.Context, senderRole string, internal bool) (*model.SupportTicketMessage, error) {
+	var body string
+	var attachments []model.SupportTicketAttachment
+	saved := make([]*savedCorporateImage, 0)
+	if strings.HasPrefix(c.ContentType(), "multipart/") {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, corporateTransferMaxRequestBytes)
+		form, err := c.MultipartForm()
+		if err != nil {
+			return nil, err
+		}
+		if values := form.Value["body"]; len(values) > 0 {
+			body = values[0]
+		}
+		if values := form.Value["internal"]; len(values) > 0 && senderRole == model.TicketSenderAdmin {
+			internal = values[0] == "true"
+		}
+		files := form.File["files"]
+		if len(files) > 5 {
+			return nil, errors.New("最多只能附加 5 张图片")
+		}
+		for _, file := range files {
+			image, saveErr := saveCorporateImage(file, "reply")
+			if saveErr != nil {
+				removeSavedCorporateImages(saved)
+				return nil, saveErr
+			}
+			saved = append(saved, image)
+			attachments = append(attachments, model.SupportTicketAttachment{StorageKey: image.StorageKey, OriginalName: image.OriginalName, ContentType: image.ContentType, ByteSize: image.ByteSize, SHA256: image.SHA256})
+		}
+	} else {
+		var request ticketReplyRequest
+		if err := c.ShouldBindJSON(&request); err != nil {
+			return nil, err
+		}
+		body = request.Body
+		if senderRole == model.TicketSenderAdmin {
+			internal = request.Internal
+		} else {
+			internal = false
+		}
 	}
-	message, err := model.AppendCorporateTransferTicketMessage(c.Param("application_no"), c.GetInt("id"), model.TicketSenderUser, request.Body, false)
+	message, err := model.AppendCorporateTransferTicketMessage(c.Param("application_no"), c.GetInt("id"), senderRole, body, internal, attachments)
+	if err != nil {
+		removeSavedCorporateImages(saved)
+		return nil, err
+	}
+	return message, nil
+}
+
+func ReplyCorporateTransferTicket(c *gin.Context) {
+	message, err := appendCorporateTransferReply(c, model.TicketSenderUser, false)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -295,22 +339,18 @@ func CancelCorporateTransfer(c *gin.Context) {
 func GetCorporateTransferAttachment(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var attachment model.SupportTicketAttachment
-	if err := model.DB.Where("id = ?", id).First(&attachment).Error; err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	if attachment.PurgedAt > 0 {
-		c.Status(http.StatusNotFound)
-		return
-	}
-	var ticket model.SupportTicket
-	query := model.DB.Where("id = ?", attachment.TicketId)
 	if c.GetInt("role") < common.RoleAdminUser {
-		query = query.Where("user_id = ?", c.GetInt("id"))
-	}
-	if err := query.First(&ticket).Error; err != nil {
-		c.Status(http.StatusNotFound)
-		return
+		userAttachment, err := model.GetCorporateTransferAttachmentForUser(id, c.GetInt("id"))
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		attachment = *userAttachment
+	} else {
+		if err := model.DB.Where("id = ? AND purged_at = ?", id, 0).First(&attachment).Error; err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
 	}
 	serveCorporateImage(c, attachment.StorageKey, attachment.ContentType, attachment.OriginalName)
 }
@@ -387,17 +427,12 @@ func AdminListCorporateTransfers(c *gin.Context) {
 }
 
 func AdminReplyCorporateTransferTicket(c *gin.Context) {
-	var request ticketReplyRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	message, err := model.AppendCorporateTransferTicketMessage(c.Param("application_no"), c.GetInt("id"), model.TicketSenderAdmin, request.Body, request.Internal)
+	message, err := appendCorporateTransferReply(c, model.TicketSenderAdmin, false)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	recordManageAudit(c, "corporate_transfer.ticket_reply", map[string]interface{}{"application_no": c.Param("application_no"), "internal": request.Internal})
+	recordManageAudit(c, "corporate_transfer.ticket_reply", map[string]interface{}{"application_no": c.Param("application_no"), "internal": message.Internal})
 	common.ApiSuccess(c, message)
 }
 

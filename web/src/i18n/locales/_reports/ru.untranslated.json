@@ -340,5 +340,22 @@
   "Review the order and choose a payment method before submitting.": "Review the order and choose a payment method before submitting.",
   "The order is fully covered by gift balance.": "The order is fully covered by gift balance.",
   "JPEG, PNG or WebP; up to 5 files and 5MB each": "支持 JPEG、PNG 或 WebP；最多 5 张，每张不超过 5MB",
-  "Publish": "Publish"
+  "Publish": "Publish",
+  "Payment application": "Payment application",
+  "Please verify the order details and complete the transfer before uploading payment evidence.": "Please verify the order details and complete the transfer before uploading payment evidence.",
+  "No usable collection channel is available for this application.": "No usable collection channel is available for this application.",
+  "Upload payment evidence": "Upload payment evidence",
+  "JPEG, PNG or WebP; up to 5 files and 5MB each. You can also drag images here.": "JPEG, PNG or WebP; up to 5 files and 5MB each. You can also drag images here.",
+  "Choose payment evidence": "Choose payment evidence",
+  "Support": "Support",
+  "Shopper": "Shopper",
+  "Awaiting administrator receipt verification": "Awaiting administrator receipt verification",
+  "Uploaded at": "Uploaded at",
+  "Internal note": "Internal note",
+  "Conversation": "Conversation",
+  "This ticket is closed. Your reply will automatically reopen it.": "This ticket is closed. Your reply will automatically reopen it.",
+  "You can paste or drop images here": "You can paste or drop images here",
+  "Add internal note": "Add internal note",
+  "Review result": "Review result",
+  "Uploaded by": "Uploaded by"
 }

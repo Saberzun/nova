@@ -115,8 +115,20 @@ export async function uploadCorporateTransferEvidence(
 
 export async function replyCorporateTransferTicket(
   applicationNo: string,
-  body: string
+  body: string,
+  files: File[] = []
 ): Promise<ApiResponse> {
+  if (files.length > 0) {
+    const form = new FormData()
+    form.append('body', body)
+    files.forEach((file) => form.append('files', file))
+    return (
+      await api.post(
+        `/api/store/corporate-transfers/${applicationNo}/reply`,
+        form
+      )
+    ).data
+  }
   return (
     await api.post(`/api/store/corporate-transfers/${applicationNo}/reply`, {
       body,
@@ -155,8 +167,21 @@ export async function getAdminCorporateTransferTicket(
 export async function adminReplyCorporateTransfer(
   applicationNo: string,
   body: string,
-  internal = false
+  internal = false,
+  files: File[] = []
 ): Promise<ApiResponse> {
+  if (files.length > 0) {
+    const form = new FormData()
+    form.append('body', body)
+    form.append('internal', String(internal))
+    files.forEach((file) => form.append('files', file))
+    return (
+      await api.post(
+        `/api/store/admin/corporate-transfers/${applicationNo}/reply`,
+        form
+      )
+    ).data
+  }
   return (
     await api.post(
       `/api/store/admin/corporate-transfers/${applicationNo}/reply`,

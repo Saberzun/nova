@@ -24,12 +24,14 @@ import { getCorporateTransferTickets } from './api'
 import { corporateTransferStatusKey } from './corporate-transfer-status'
 import { CorporateTransferTicketDetail } from './corporate-transfer-ticket-detail'
 import { formatDate } from './lib'
+import type { CorporateTransferStatus } from './types'
 
 export function CorporateTransferTickets() {
   const { t } = useTranslation()
   const [selectedTicket, setSelectedTicket] = useState<{
     ticketNo: string
     subject: string
+    status: CorporateTransferStatus
   } | null>(null)
   const tickets = useQuery({
     queryKey: ['corporate-transfer', 'tickets'],
@@ -74,6 +76,7 @@ export function CorporateTransferTickets() {
                     setSelectedTicket({
                       ticketNo: item.ticket.ticket_no,
                       subject: item.ticket.subject,
+                      status: item.application.status,
                     })
                   }
                 >
@@ -97,16 +100,23 @@ export function CorporateTransferTickets() {
           <SheetContent
             side='right'
             className={sideDrawerContentClassName(
-              'max-w-none sm:!max-w-[min(900px,92vw)]'
+              'max-w-none sm:!max-w-[min(640px,100vw)]'
             )}
           >
             <SheetHeader className={sideDrawerHeaderClassName()}>
               <SheetTitle>{selectedTicket?.subject ?? t('Ticket')}</SheetTitle>
               <SheetDescription>
-                {selectedTicket?.ticketNo ?? ''}
+                <span className='flex items-center gap-2'>
+                  <span>{selectedTicket?.ticketNo ?? ''}</span>
+                  {selectedTicket ? (
+                    <Badge variant='secondary'>
+                      {t(corporateTransferStatusKey(selectedTicket.status))}
+                    </Badge>
+                  ) : null}
+                </span>
               </SheetDescription>
             </SheetHeader>
-            <div className={sideDrawerFormClassName()}>
+            <div className={sideDrawerFormClassName('overflow-hidden')}>
               {selectedTicket ? (
                 <CorporateTransferTicketDetail
                   ticketNo={selectedTicket.ticketNo}

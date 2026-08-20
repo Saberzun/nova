@@ -171,3 +171,71 @@ func TestCorporateTransferExpiryTerminatesOrderAndTicket(t *testing.T) {
 	assert.Equal(t, ProductOrderStatusCancelled, order.Status)
 	assert.Equal(t, TicketStatusClosed, ticket.Status)
 }
+
+func TestCorporateTransferReplyReopensOnlyTheTicket(t *testing.T) {
+	resetCorporateTransferFixtures(t)
+	sku := seedCorporateTransferStore(t)
+	creation := createCorporateTransferFixture(t, 91005, sku, "corporate-reply-reopen")
+	require.NoError(t, SetCorporateTransferTicketOpen(creation.Application.ApplicationNo, 1, false))
+
+	attachment := SupportTicketAttachment{StorageKey: "reply/image.png", OriginalName: "image.png", ContentType: "image/png", ByteSize: 10, SHA256: fmt.Sprintf("%064d", 3)}
+	message, err := AppendCorporateTransferTicketMessage(creation.Application.ApplicationNo, 91005, TicketSenderUser, "", true, []SupportTicketAttachment{attachment})
+	require.NoError(t, err)
+	require.Len(t, message.Attachments, 1)
+	assert.False(t, message.Internal)
+	assert.Equal(t, "reply", message.Attachments[0].Kind)
+	evidence := make([]SupportTicketAttachment, 5)
+	for index := range evidence {
+		evidence[index] = SupportTicketAttachment{StorageKey: fmt.Sprintf("evidence/%d.png", index), OriginalName: fmt.Sprintf("%d.png", index), ContentType: "image/png", ByteSize: 10, SHA256: fmt.Sprintf("%064d", index+10)}
+	}
+	evidenceMessage, err := SubmitCorporateTransferEvidence(creation.Application.ApplicationNo, 91005, "", evidence)
+	require.NoError(t, err)
+	require.Len(t, evidenceMessage.Attachments, 5)
+	assert.Equal(t, "payment_evidence", evidenceMessage.Attachments[0].Kind)
+
+	var ticket SupportTicket
+	var application CorporateTransferApplication
+	var order ProductOrder
+	require.NoError(t, DB.Where("id = ?", creation.Ticket.Id).First(&ticket).Error)
+	require.NoError(t, DB.Where("id = ?", creation.Application.Id).First(&application).Error)
+	require.NoError(t, DB.Where("id = ?", creation.Order.Id).First(&order).Error)
+	assert.Equal(t, TicketStatusOpen, ticket.Status)
+	assert.Zero(t, ticket.ClosedAt)
+	assert.Equal(t, CorporateTransferUnderReview, application.Status)
+	assert.Equal(t, ProductOrderStatusPending, order.Status)
+}
+
+func TestCorporateTransferTerminalReplyReopensCommunicationOnly(t *testing.T) {
+	resetCorporateTransferFixtures(t)
+	sku := seedCorporateTransferStore(t)
+	creation := createCorporateTransferFixture(t, 91006, sku, "corporate-terminal-reply")
+	require.NoError(t, CancelCorporateTransfer(creation.Application.ApplicationNo, 91006, "cancelled for test"))
+
+	_, err := AppendCorporateTransferTicketMessage(creation.Application.ApplicationNo, 91006, TicketSenderUser, "please reopen", false, nil)
+	require.NoError(t, err)
+
+	var ticket SupportTicket
+	var application CorporateTransferApplication
+	require.NoError(t, DB.Where("id = ?", creation.Ticket.Id).First(&ticket).Error)
+	require.NoError(t, DB.Where("id = ?", creation.Application.Id).First(&application).Error)
+	assert.Equal(t, TicketStatusOpen, ticket.Status)
+	assert.Equal(t, CorporateTransferCancelled, application.Status)
+}
+
+func TestCorporateTransferInternalAttachmentIsNotVisibleToShopper(t *testing.T) {
+	resetCorporateTransferFixtures(t)
+	sku := seedCorporateTransferStore(t)
+	creation := createCorporateTransferFixture(t, 91007, sku, "corporate-internal-attachment")
+	publicMessage, err := AppendCorporateTransferTicketMessage(creation.Application.ApplicationNo, 1, TicketSenderAdmin, "public", false, []SupportTicketAttachment{{StorageKey: "reply/public.png", OriginalName: "public.png", ContentType: "image/png", ByteSize: 10, SHA256: fmt.Sprintf("%064d", 30)}})
+	require.NoError(t, err)
+	internalMessage, err := AppendCorporateTransferTicketMessage(creation.Application.ApplicationNo, 1, TicketSenderAdmin, "internal", true, []SupportTicketAttachment{{StorageKey: "reply/internal.png", OriginalName: "internal.png", ContentType: "image/png", ByteSize: 10, SHA256: fmt.Sprintf("%064d", 31)}})
+	require.NoError(t, err)
+
+	visible, err := GetCorporateTransferAttachmentForUser(publicMessage.Attachments[0].Id, 91007)
+	require.NoError(t, err)
+	assert.Equal(t, publicMessage.Attachments[0].Id, visible.Id)
+	_, err = GetCorporateTransferAttachmentForUser(internalMessage.Attachments[0].Id, 91007)
+	require.Error(t, err)
+	_, err = GetCorporateTransferAttachmentForUser(publicMessage.Attachments[0].Id, 99999)
+	require.Error(t, err)
+}

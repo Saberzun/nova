@@ -5670,6 +5670,24 @@
     "Verified receipts": "已核验到账记录",
     "View ticket": "查看工单",
     "Void": "作废",
-    "Publish": "发布"
+    "Publish": "发布",
+    "Payment application": "转账申请信息",
+    "Please verify the order details and complete the transfer before uploading payment evidence.": "请核对订单信息，完成转账后上传支付凭证。",
+    "No usable collection channel is available for this application.": "该转账申请当前没有可用的收款渠道，请联系管理员。",
+    "Upload payment evidence": "上传支付凭证",
+    "JPEG, PNG or WebP; up to 5 files and 5MB each. You can also drag images here.": "支持 JPEG、PNG 或 WebP；最多 5 张，每张不超过 5MB，也可以将图片拖到此处。",
+    "Choose payment evidence": "选择支付凭证",
+    "Me": "我",
+    "Support": "客服",
+    "Shopper": "用户",
+    "Awaiting administrator receipt verification": "等待管理员进行到账核验",
+    "Uploaded at": "上传时间",
+    "Internal note": "内部备注",
+    "Conversation": "工单沟通",
+    "This ticket is closed. Your reply will automatically reopen it.": "该工单已关闭，回复后将自动重新打开。",
+    "You can paste or drop images here": "可以粘贴或拖入图片",
+    "Add internal note": "添加内部备注",
+    "Review result": "审核结果",
+    "Uploaded by": "上传方"
   }
 }

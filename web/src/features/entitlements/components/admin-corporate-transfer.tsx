@@ -41,12 +41,17 @@ import {
   voidCorporateReceipt,
 } from '../api'
 import { corporateTransferStatusKey } from '../corporate-transfer-status'
-import { formatDate } from '../lib'
 import type {
   CorporateCollectionChannel,
   CorporateTransferApplication,
 } from '../types'
 import { AuthenticatedCorporateImage } from './authenticated-corporate-image'
+import {
+  CorporateTransferMessageList,
+  CorporateTransferPaymentPrompt,
+  CorporateTransferReviewResult,
+} from './corporate-transfer-conversation'
+import { CorporateTransferReplyComposer } from './corporate-transfer-reply-composer'
 
 const defaultChannels: CorporateCollectionChannel[] = [
   {
@@ -376,6 +381,7 @@ function TransferReviewDetail(props: {
   const [reason, setReason] = useState('')
   const [internalNote, setInternalNote] = useState('')
   const [adminReply, setAdminReply] = useState('')
+  const [adminReplyFiles, setAdminReplyFiles] = useState<File[]>([])
   const [refundReference, setRefundReference] = useState('')
   const detail = useQuery({
     queryKey: [
@@ -395,6 +401,12 @@ function TransferReviewDetail(props: {
     })
     await queryClient.invalidateQueries({
       queryKey: ['corporate-transfer', 'admin-ticket'],
+    })
+    await queryClient.invalidateQueries({
+      queryKey: ['corporate-transfer', 'unread'],
+    })
+    await queryClient.invalidateQueries({
+      queryKey: ['entitlement-store', 'orders'],
     })
   }
   const receiptTotal = useMemo(
@@ -491,12 +503,14 @@ function TransferReviewDetail(props: {
     onError: (error) => toast.error(error.message),
   })
   const ticketAction = useMutation({
-    mutationFn: async (action: 'reply' | 'toggle') => {
+    mutationFn: async (action: 'reply' | 'internal' | 'toggle') => {
       const response =
-        action === 'reply'
+        action === 'reply' || action === 'internal'
           ? await adminReplyCorporateTransfer(
               props.application.application_no,
-              adminReply
+              adminReply,
+              action === 'internal',
+              adminReplyFiles
             )
           : await setCorporateTransferTicketOpen(
               props.application.application_no,
@@ -508,6 +522,7 @@ function TransferReviewDetail(props: {
     },
     onSuccess: async () => {
       setAdminReply('')
+      setAdminReplyFiles([])
       await refresh()
     },
     onError: (error) => toast.error(error.message),
@@ -544,67 +559,48 @@ function TransferReviewDetail(props: {
           </div>
         </CardContent>
       </Card>
+      <CorporateTransferPaymentPrompt
+        application={data.application}
+        collection={data.collection}
+        collectionOutdated={data.collection_outdated}
+        terminal={['cancelled', 'expired', 'rejected', 'fulfilled'].includes(
+          data.application.status
+        )}
+      />
       <Card>
         <CardHeader>
-          <CardTitle>{t('Payment evidence')}</CardTitle>
+          <CardTitle>{t('Conversation')}</CardTitle>
         </CardHeader>
         <CardContent className='space-y-4'>
-          {data.messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.sender_role === 'admin' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`w-full max-w-[90%] space-y-2 rounded-2xl px-4 py-3 ${message.sender_role === 'admin' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
-              >
-                <div className='flex justify-between gap-3 text-xs opacity-75'>
-                  <span>{t(message.sender_role)}</span>
-                  <span>{formatDate(message.created_at)}</span>
-                </div>
-                {message.body ? (
-                  <p className='text-sm whitespace-pre-wrap'>{message.body}</p>
-                ) : null}
-                <div className='grid gap-3 sm:grid-cols-2'>
-                  {message.attachments?.map((attachment) => (
-                    <AuthenticatedCorporateImage
-                      key={attachment.id}
-                      path={`/api/store/corporate-transfers/attachments/${attachment.id}`}
-                      alt={attachment.original_name}
-                      className='max-h-[540px] w-full rounded-xl border object-contain'
-                      openOriginal
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-          <Textarea
-            value={adminReply}
-            placeholder={t('Reply to user')}
-            onChange={(event) => setAdminReply(event.target.value)}
+          <CorporateTransferMessageList
+            messages={data.messages}
+            viewerRole='admin'
+            application={data.application}
           />
-          <div className='flex flex-wrap gap-3'>
-            <Button
-              variant='outline'
-              disabled={
-                !adminReply.trim() ||
-                ticketAction.isPending ||
-                data.ticket.status !== 'open'
-              }
-              onClick={() => ticketAction.mutate('reply')}
-            >
-              {t('Send reply')}
-            </Button>
-            <Button
-              variant='outline'
-              disabled={ticketAction.isPending}
-              onClick={() => ticketAction.mutate('toggle')}
-            >
-              {data.ticket.status === 'open'
-                ? t('Close ticket')
-                : t('Reopen ticket')}
-            </Button>
-          </div>
+          <CorporateTransferReviewResult application={data.application} />
+          <CorporateTransferReplyComposer
+            value={adminReply}
+            files={adminReplyFiles}
+            pending={ticketAction.isPending}
+            placeholder={t('Reply to user')}
+            onValueChange={setAdminReply}
+            onFilesChange={setAdminReplyFiles}
+            onSubmit={() => ticketAction.mutate('reply')}
+            submitLabel={t('Send reply')}
+            secondarySubmitLabel={t('Add internal note')}
+            onSecondarySubmit={() => ticketAction.mutate('internal')}
+            trailingAction={
+              <Button
+                variant='outline'
+                disabled={ticketAction.isPending}
+                onClick={() => ticketAction.mutate('toggle')}
+              >
+                {data.ticket.status === 'open'
+                  ? t('Close ticket')
+                  : t('Reopen ticket')}
+              </Button>
+            }
+          />
         </CardContent>
       </Card>
       <Card>

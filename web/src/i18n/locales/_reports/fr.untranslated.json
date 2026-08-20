@@ -77,5 +77,8 @@
   "Failed to save your preference": "Failed to save your preference",
   "Review the order and choose how to pay before submitting.": "Review the order and choose how to pay before submitting.",
   "Review the order and choose a payment method before submitting.": "Review the order and choose a payment method before submitting.",
-  "The order is fully covered by gift balance.": "The order is fully covered by gift balance."
+  "The order is fully covered by gift balance.": "The order is fully covered by gift balance.",
+  "Please verify the order details and complete the transfer before uploading payment evidence.": "Please verify the order details and complete the transfer before uploading payment evidence.",
+  "JPEG, PNG or WebP; up to 5 files and 5MB each. You can also drag images here.": "JPEG, PNG or WebP; up to 5 files and 5MB each. You can also drag images here.",
+  "You can paste or drop images here": "You can paste or drop images here"
 }

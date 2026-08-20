@@ -5670,6 +5670,24 @@
     "Verified receipts": "已核驗到帳記錄",
     "View ticket": "查看工單",
     "Void": "作廢",
-    "Publish": "發佈"
+    "Publish": "發佈",
+    "Payment application": "Payment application",
+    "Please verify the order details and complete the transfer before uploading payment evidence.": "Please verify the order details and complete the transfer before uploading payment evidence.",
+    "No usable collection channel is available for this application.": "No usable collection channel is available for this application.",
+    "Upload payment evidence": "Upload payment evidence",
+    "JPEG, PNG or WebP; up to 5 files and 5MB each. You can also drag images here.": "JPEG, PNG or WebP; up to 5 files and 5MB each. You can also drag images here.",
+    "Choose payment evidence": "Choose payment evidence",
+    "Me": "Me",
+    "Support": "Support",
+    "Shopper": "Shopper",
+    "Awaiting administrator receipt verification": "Awaiting administrator receipt verification",
+    "Uploaded at": "Uploaded at",
+    "Internal note": "Internal note",
+    "Conversation": "Conversation",
+    "This ticket is closed. Your reply will automatically reopen it.": "This ticket is closed. Your reply will automatically reopen it.",
+    "You can paste or drop images here": "You can paste or drop images here",
+    "Add internal note": "Add internal note",
+    "Review result": "Review result",
+    "Uploaded by": "Uploaded by"
   }
 }
