@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/setting/system_setting"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,4 +28,31 @@ func TestStoreOrderAmountMatches(t *testing.T) {
 			assert.Equal(t, test.matches, storeOrderAmountMatches(test.totalAmountMinor, test.paidAmount))
 		})
 	}
+}
+
+func TestStoreEpayReturnRedirectsFailedCallbacksToStore(t *testing.T) {
+	previousAddress := system_setting.ServerAddress
+	system_setting.ServerAddress = "https://dashboard.example.com/"
+	t.Cleanup(func() { system_setting.ServerAddress = previousAddress })
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest("GET", "/api/store/epay/return", nil)
+
+	StoreEpayReturn(context)
+
+	assert.Equal(t, 302, recorder.Code)
+	assert.Equal(t, "https://dashboard.example.com/store?pay=fail", recorder.Header().Get("Location"))
+}
+
+func TestStorePaymentReturnPathRedirectsSuccessfulPaymentsToStore(t *testing.T) {
+	previousAddress := system_setting.ServerAddress
+	system_setting.ServerAddress = "https://dashboard.example.com/"
+	t.Cleanup(func() { system_setting.ServerAddress = previousAddress })
+
+	assert.Equal(
+		t,
+		"https://dashboard.example.com/store?pay=success",
+		storePaymentReturnPath(true),
+	)
 }

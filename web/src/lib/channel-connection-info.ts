@@ -23,8 +23,75 @@ export type ChannelConnectionInfo = {
   url: string
 }
 
+type CCSwitchImportOptions = {
+  app: string
+  name: string
+  models: Record<string, string>
+  apiKey: string
+  status: unknown
+  currentOrigin: string
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function readStatusUrl(status: unknown, keys: string[]): string | undefined {
+  if (!isRecord(status)) return undefined
+
+  const sources = [status]
+  if (isRecord(status.data)) sources.push(status.data)
+
+  for (const source of sources) {
+    for (const key of keys) {
+      const value = source[key]
+      if (typeof value === 'string' && value.trim()) return value
+    }
+  }
+
+  return undefined
+}
+
+function resolvePublicUrl(
+  configuredAddress: string | undefined,
+  fallbackAddress: string
+): string {
+  const fallback = fallbackAddress.trim().replace(/\/+$/, '')
+  const configured = configuredAddress?.trim().replace(/\/+$/, '')
+  if (!configured) return fallback
+
+  try {
+    const configuredUrl = new URL(configured)
+    const fallbackUrl = new URL(fallback)
+    if (!['http:', 'https:'].includes(configuredUrl.protocol)) return fallback
+    if (
+      LOOPBACK_HOSTS.has(configuredUrl.hostname) &&
+      !LOOPBACK_HOSTS.has(fallbackUrl.hostname)
+    ) {
+      return fallback
+    }
+    return configured
+  } catch {
+    return fallback
+  }
+}
+
+export function resolveConnectionAddresses(
+  status: unknown,
+  currentOrigin: string
+): { apiBaseUrl: string; homepage: string } {
+  const homepage = resolvePublicUrl(
+    readStatusUrl(status, ['server_address', 'serverAddress']),
+    currentOrigin
+  )
+  const apiBaseUrl = resolvePublicUrl(
+    readStatusUrl(status, ['api_base_url', 'apiBaseUrl']),
+    homepage
+  )
+
+  return { apiBaseUrl, homepage }
 }
 
 export function encodeChannelConnectionInfo(key: string, url: string): string {
@@ -33,6 +100,38 @@ export function encodeChannelConnectionInfo(key: string, url: string): string {
     key,
     url,
   })
+}
+
+export function encodeChannelConnectionInfoFromStatus(
+  key: string,
+  status: unknown,
+  currentOrigin: string
+): string {
+  const { apiBaseUrl } = resolveConnectionAddresses(status, currentOrigin)
+  return encodeChannelConnectionInfo(key, apiBaseUrl)
+}
+
+export function buildCCSwitchImportUrl(options: CCSwitchImportOptions): string {
+  const { apiBaseUrl, homepage } = resolveConnectionAddresses(
+    options.status,
+    options.currentOrigin
+  )
+  const endpoint =
+    options.app === 'codex' && !apiBaseUrl.endsWith('/v1')
+      ? `${apiBaseUrl}/v1`
+      : apiBaseUrl
+  const params = new URLSearchParams()
+  params.set('resource', 'provider')
+  params.set('app', options.app)
+  params.set('name', options.name)
+  params.set('endpoint', endpoint)
+  params.set('apiKey', options.apiKey)
+  for (const [key, value] of Object.entries(options.models)) {
+    if (value) params.set(key, value)
+  }
+  params.set('homepage', homepage)
+  params.set('enabled', 'true')
+  return `ccswitch://v1/import?${params.toString()}`
 }
 
 export function parseChannelConnectionInfo(

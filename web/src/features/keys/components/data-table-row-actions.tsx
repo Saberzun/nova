@@ -50,26 +50,14 @@ import {
 import { useChatPresets } from '@/features/chat/hooks/use-chat-presets'
 import { resolveChatUrl, type ChatPreset } from '@/features/chat/lib/chat-links'
 import { sendToFluent } from '@/features/chat/lib/send-to-fluent'
-import { encodeChannelConnectionInfo } from '@/lib/channel-connection-info'
+import { useStatus } from '@/hooks/use-status'
+import { encodeChannelConnectionInfoFromStatus } from '@/lib/channel-connection-info'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 
 import { updateApiKeyStatus } from '../api'
 import { API_KEY_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import { apiKeySchema } from '../types'
 import { useApiKeys } from './api-keys-provider'
-
-function getServerAddress(): string {
-  try {
-    const raw = localStorage.getItem('status')
-    if (raw) {
-      const status = JSON.parse(raw)
-      if (status.server_address) return status.server_address as string
-    }
-  } catch {
-    /* empty */
-  }
-  return window.location.origin
-}
 
 type DataTableRowActionsProps<TData> = {
   row: Row<TData>
@@ -91,6 +79,7 @@ export function DataTableRowActions<TData>({
   } = useApiKeys()
   const isEnabled = apiKey.status === API_KEY_STATUS.ENABLED
   const { chatPresets, serverAddress } = useChatPresets()
+  const { status } = useStatus()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
   const resolvedRealKey = resolvedKeys[apiKey.id]
   const isRealKeyLoading = Boolean(loadingKeys[apiKey.id])
@@ -255,9 +244,10 @@ export function DataTableRowActions<TData>({
           onClick={async () => {
             const realKey = getCachedRealKey()
             if (!realKey) return
-            const connStr = encodeChannelConnectionInfo(
+            const connStr = encodeChannelConnectionInfoFromStatus(
               realKey,
-              getServerAddress()
+              status,
+              window.location.origin
             )
             const ok = await copyToClipboard(connStr)
             if (ok) toast.success(t('Copied'))

@@ -39,6 +39,7 @@ describe('legacy frontend route migration', () => {
       '/console/log': '/usage-logs',
       '/console/midjourney': '/usage-logs/drawing',
       '/console/task': '/usage-logs/task',
+      '/console/store': '/store',
       '/console/chat/42': '/chat/42',
     }
 
@@ -55,6 +56,10 @@ describe('legacy frontend route migration', () => {
     assert.equal(
       resolveLegacyRoute('/console/topup?source=email#orders'),
       '/wallet?source=email#orders'
+    )
+    assert.equal(
+      resolveLegacyRoute('/console/store?pay=success'),
+      '/store?pay=success'
     )
   })
 

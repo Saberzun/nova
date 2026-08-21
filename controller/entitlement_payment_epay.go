@@ -158,10 +158,17 @@ func StoreEpayNotify(c *gin.Context) {
 	_, _ = c.Writer.Write([]byte("fail"))
 }
 
+func storePaymentReturnPath(success bool) string {
+	if success {
+		return paymentReturnPath("/store?pay=success")
+	}
+	return paymentReturnPath("/store?pay=fail")
+}
+
 func StoreEpayReturn(c *gin.Context) {
 	if ok, _ := completeStoreEpay(c); ok {
-		c.Redirect(http.StatusFound, paymentReturnPath("/console/store?pay=success"))
+		c.Redirect(http.StatusFound, storePaymentReturnPath(true))
 		return
 	}
-	c.Redirect(http.StatusFound, paymentReturnPath("/console/store?pay=fail"))
+	c.Redirect(http.StatusFound, storePaymentReturnPath(false))
 }
