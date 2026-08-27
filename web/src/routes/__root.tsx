@@ -33,8 +33,7 @@ import { ThemeCustomizationProvider } from '@/context/theme-customization-provid
 import { saveAffiliateCode } from '@/features/auth/lib/storage'
 import { GeneralError } from '@/features/errors/general-error'
 import { NotFoundError } from '@/features/errors/not-found-error'
-import { getSetupStatus } from '@/features/setup/api'
-import { useSystemConfig } from '@/hooks/use-system-config'
+import { getSetupStatus, shouldPersistSetupCheck } from '@/features/setup/api'
 import {
   bootstrapAuthentication,
   clearAuthenticatedClientState,
@@ -47,9 +46,6 @@ import { useAuthStore } from '@/stores/auth-store'
 function RootComponent() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-
-  // Load system configuration (logo, system name, etc.) from backend
-  useSystemConfig({ autoLoad: true })
 
   useEffect(() => {
     const aff = new URLSearchParams(window.location.search).get('aff')?.trim()
@@ -167,11 +163,12 @@ export const Route = createRootRouteWithContext<{
         authBootstrap,
       ])
 
-      if (status?.success && status.data && !status.data.status) {
+      if (shouldPersistSetupCheck(status)) {
+        setupStatusChecked = true
+        setSetupStatusCache(true)
+      } else if (status?.success && status.data && !status.data.status) {
         throw redirect({ to: '/setup' })
       }
-      setupStatusChecked = true
-      setSetupStatusCache(true)
     } else {
       await authBootstrap
     }

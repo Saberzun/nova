@@ -30,6 +30,12 @@ export async function getSetupStatus(): Promise<SetupResponse> {
   return res.data
 }
 
+export function shouldPersistSetupCheck(
+  response: SetupResponse | null | undefined
+): boolean {
+  return Boolean(response?.success && response.data?.status)
+}
+
 export async function submitSetup(
   payload: Record<string, unknown>
 ): Promise<SetupResponse> {

@@ -28,11 +28,12 @@ import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { toast } from 'sonner'
 
-import { getStatus } from '@/lib/api'
+import { systemStatusQueryOptions } from '@/hooks/use-status'
 import { installBuildMetadata } from '@/lib/build-metadata'
 import '@/lib/dayjs'
 import { initializeFrontendCache } from '@/lib/frontend-cache'
 import { handleServerError } from '@/lib/handle-server-error'
+import { resolveQueryErrorAction } from '@/lib/query-error-policy'
 
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
@@ -81,12 +82,12 @@ const queryClient = new QueryClient({
     },
   },
   queryCache: new QueryCache({
-    onError: (error) => {
-      if (error instanceof AxiosError) {
-        if (error.response?.status === 500) {
-          toast.error(i18next.t('Internal Server Error!'))
-          router.navigate({ to: '/500' })
-        }
+    onError: (error, query) => {
+      const action = resolveQueryErrorAction(error, query.meta?.errorPolicy)
+      if (action === 'page') {
+        void router.navigate({ to: '/500' })
+      } else if (action === 'toast') {
+        toast.error(i18next.t('Internal Server Error!'))
       }
     },
   }),
@@ -134,8 +135,10 @@ if (!rootElement) {
     } catch {
       /* empty */
     }
-    // Background refresh
-    getStatus()
+    // Reuse the same React Query entry consumed by the rest of the app. This
+    // prevents a cold page load from issuing several concurrent status calls.
+    queryClient
+      .fetchQuery(systemStatusQueryOptions)
       .then((s) => {
         if (s?.system_name) {
           apply(s.system_name as string)

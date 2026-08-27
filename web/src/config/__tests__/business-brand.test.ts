@@ -33,4 +33,21 @@ describe('itokenify business brand', () => {
       [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
     )
   })
+
+  test('publishes the itokenify favicon for desktop and mobile browsers', () => {
+    const html = readFileSync('index.html', 'utf8')
+    const defaultFavicon = readFileSync('public/favicon.ico')
+    const brandedFavicon = readFileSync('public/itokenify-tab.ico')
+
+    assert.match(html, /rel="icon"[^>]+href="\/favicon\.ico\?v=itokenify-/)
+    assert.match(
+      html,
+      /rel="icon"[^>]+type="image\/png"[^>]+href="\/itokenify-logo\.png\?v=itokenify-/
+    )
+    assert.match(
+      html,
+      /rel="apple-touch-icon"[^>]+href="\/itokenify-logo\.png\?v=itokenify-/
+    )
+    assert.deepEqual(defaultFavicon, brandedFavicon)
+  })
 })

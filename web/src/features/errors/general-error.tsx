@@ -73,6 +73,9 @@ export function GeneralError({
         )}
         {!minimal && (
           <div className='mt-6 flex flex-wrap justify-center gap-4'>
+            <Button variant='outline' onClick={() => window.location.reload()}>
+              {t('Refresh')}
+            </Button>
             <Button variant='outline' onClick={() => history.go(-1)}>
               {t('Go Back')}
             </Button>
