@@ -54,30 +54,45 @@ export function shouldRetrySystemStatusRequest(
   return status === undefined || status === 429 || status >= 500
 }
 
+export async function withSystemConfigLoading<T>(
+  request: () => Promise<T>
+): Promise<T> {
+  useSystemConfigStore.getState().setLoading(true)
+  try {
+    return await request()
+  } finally {
+    useSystemConfigStore.getState().setLoading(false)
+  }
+}
+
 export const systemStatusQueryOptions = queryOptions({
   queryKey: ['status'],
-  queryFn: async () => {
-    const status = await getStatus()
-    try {
-      if (status) {
-        const { setConfig } = useSystemConfigStore.getState()
-        setConfig(mapStatusDataToConfig(status))
+  queryFn: () =>
+    withSystemConfigLoading(async () => {
+      const status = await getStatus()
+      try {
+        if (status) {
+          const { setConfig } = useSystemConfigStore.getState()
+          setConfig(mapStatusDataToConfig(status))
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[useStatus] Failed to sync status to system config',
+            err
+          )
+        }
       }
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.warn('[useStatus] Failed to sync status to system config', err)
+      try {
+        if (typeof window !== 'undefined' && status) {
+          window.localStorage.setItem('status', JSON.stringify(status))
+        }
+      } catch {
+        /* empty */
       }
-    }
-    try {
-      if (typeof window !== 'undefined' && status) {
-        window.localStorage.setItem('status', JSON.stringify(status))
-      }
-    } catch {
-      /* empty */
-    }
-    return status as SystemStatus | null
-  },
+      return status as SystemStatus | null
+    }),
   placeholderData: getInitialStatus(),
   staleTime: 5 * 60 * 1000,
   gcTime: 30 * 60 * 1000,

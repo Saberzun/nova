@@ -19,7 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import { shouldRetrySystemStatusRequest } from './use-status'
+import { useSystemConfigStore } from '@/stores/system-config-store'
+
+import {
+  shouldRetrySystemStatusRequest,
+  withSystemConfigLoading,
+} from './use-status'
 
 describe('system status request resilience', () => {
   test('retries transient failures at most twice', () => {
@@ -40,5 +45,25 @@ describe('system status request resilience', () => {
       shouldRetrySystemStatusRequest(0, { response: { status: 401 } }),
       false
     )
+  })
+
+  test('always clears the shared loading state after a request settles', async () => {
+    let resolveRequest: (() => void) | undefined
+    const pending = withSystemConfigLoading(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRequest = resolve
+        })
+    )
+
+    assert.equal(useSystemConfigStore.getState().loading, true)
+    resolveRequest?.()
+    await pending
+    assert.equal(useSystemConfigStore.getState().loading, false)
+
+    await assert.rejects(
+      withSystemConfigLoading(() => Promise.reject(new Error('unavailable')))
+    )
+    assert.equal(useSystemConfigStore.getState().loading, false)
   })
 })
