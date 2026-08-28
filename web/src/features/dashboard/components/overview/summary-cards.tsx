@@ -344,8 +344,11 @@ export function SummaryCards() {
             </div>
           </div>
 
-          <Button className='justify-between' render={<Link to='/wallet' />}>
-            <span>{t('Wallet')}</span>
+          <Button
+            className='justify-between'
+            render={<Link to='/entitlements' />}
+          >
+            <span>{t('My Subscriptions')}</span>
             <ArrowRight data-icon='inline-end' />
           </Button>
         </div>

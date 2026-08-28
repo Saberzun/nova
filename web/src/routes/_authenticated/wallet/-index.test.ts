@@ -16,10 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
-export const Route = createFileRoute('/_authenticated/wallet/')({
-  beforeLoad: () => {
-    throw redirect({ to: '/entitlements', replace: true })
-  },
+import { Route } from './index'
+
+test('/wallet never renders the legacy wallet UI', () => {
+  const beforeLoad = Route.options.beforeLoad
+  assert.equal(typeof beforeLoad, 'function')
+
+  assert.throws(
+    () => beforeLoad?.({} as never),
+    (error: unknown) => {
+      const options = (error as { options?: Record<string, unknown> }).options
+      assert.equal(options?.to, '/entitlements')
+      assert.equal(options?.replace, true)
+      return true
+    }
+  )
 })

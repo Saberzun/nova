@@ -80,7 +80,7 @@ export function resolveLegacyRoute(rawHref: string): string | null {
     return buildTargetHref('/403', source)
   }
   if (pathname === '/console/topup') {
-    return buildTargetHref('/wallet', source)
+    return buildTargetHref('/store', source)
   }
   if (pathname === '/console/setting') {
     const tab = source.searchParams.get('tab') ?? ''

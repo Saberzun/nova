@@ -55,7 +55,7 @@ describe('legacy frontend route migration', () => {
     )
     assert.equal(
       resolveLegacyRoute('/console/topup?source=email#orders'),
-      '/wallet?source=email#orders'
+      '/store?source=email#orders'
     )
     assert.equal(
       resolveLegacyRoute('/console/store?pay=success'),

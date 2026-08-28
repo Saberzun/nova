@@ -105,7 +105,6 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/usage-logs/common': { section: 'console', module: 'log' },
   '/usage-logs/drawing': { section: 'console', module: 'midjourney' },
   '/usage-logs/task': { section: 'console', module: 'task' },
-  '/wallet': { section: 'personal', module: 'topup' },
   '/store': { section: 'personal', module: 'topup' },
   '/entitlements': { section: 'personal', module: 'topup' },
   '/profile': { section: 'personal', module: 'personal' },
@@ -315,8 +314,8 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
 
 /**
  * Check whether a single route is visible under the current sidebar_modules
- * config. Used by entries living outside the sidebar (e.g. the profile
- * dropdown's wallet link) so they honour the same "wallet display" toggle.
+ * config. Used by entries living outside the sidebar so they honour the same
+ * module visibility settings.
  */
 export function useIsSidebarModuleVisible(url: string): boolean {
   const { status } = useStatus()
