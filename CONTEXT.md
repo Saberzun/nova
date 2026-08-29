@@ -35,3 +35,15 @@ _Avoid_: 到账证明, 自动支付回调, 支付结果
 **Receipt Verification（到账核验）**:
 An administrator's confirmation of the actual transfer channel, received amount, external transaction reference, and receipt status against the platform's collection records. It is the sole basis for settling a Transfer Application.
 _Avoid_: 凭证审核通过, 工单关闭, 截图确认
+
+**Stream Completion Evidence（流完成证据）**:
+The strongest durable observation New API has about how far an upstream streaming request progressed, ranging from no upstream response through lifecycle and output events to a terminal event with authoritative usage. It is independent of whether the downstream connection remained open.
+_Avoid_: client_gone 状态, 流错误, 上游已计费
+
+**Billing Evidence（计费证据）**:
+The usage facts or conservative estimates that justify a settlement amount, together with their source and confidence. Transport status alone is not Billing Evidence.
+_Avoid_: stream_status, HTTP 200, client_gone
+
+**Fallback Usage（兜底用量）**:
+A request-local token estimate used only for an eligible genuine client disconnect after New API has completely examined the frozen event range and established that it contains no complete, internally consistent authoritative usage: input is estimated from the accepted request and output is counted from billable data actually observed from the upstream within that range.
+_Avoid_: 全额预扣, 待对账, 上游准确 usage

@@ -60,6 +60,33 @@ type ResponsesUsageInfo struct {
 	BuiltInTools map[string]*BuildInToolInfo
 }
 
+// ClientGoneBillingEvidence contains admin-only facts explaining the usage
+// source selected for an interrupted Responses stream. It is request-local and
+// never carries prompt/response content.
+type ClientGoneBillingEvidence struct {
+	UsageSource                      string
+	TerminalEventSeen                bool
+	ReceivedDataEvents               int
+	EstimatedPromptTokens            int
+	ObservedOutputTokens             int
+	ObservedOutputCategories         []string
+	InputTokenizerModel              string
+	OutputTokenizerModel             string
+	AuthoritativeUsageSeen           bool
+	AuthoritativeUsageValid          bool
+	AuthoritativeUsageRejectReason   string
+	UsageInspectionComplete          bool
+	UsageInspectionUncertaintyReason string
+	FallbackEligibilityResult        bool
+	FallbackIneligibleReason         string
+	FallbackCachePolicy              string
+	CutoffSequence                   uint64
+	PreConsumedQuota                 int
+	AttemptedSettlementQuota         int
+	SettledQuota                     int
+	SettlementSucceeded              bool
+}
+
 type ChannelMeta struct {
 	ChannelType          int
 	ChannelId            int
@@ -153,6 +180,7 @@ type RelayInfo struct {
 	RuntimeHeadersOverride                map[string]interface{}
 	UseRuntimeHeadersOverride             bool
 	ParamOverrideAudit                    []string
+	PassThroughRequestBody                bool
 
 	// UpstreamRequestBodySize is the byte size of the marshaled upstream request
 	// body. It is set when the body is wrapped in a BodyStorage (see
@@ -182,7 +210,9 @@ type RelayInfo struct {
 	// 若为空，调用 GetFinalRequestRelayFormat 会回退到 RequestConversionChain 的最后一项或 RelayFormat。
 	FinalRequestRelayFormat types.RelayFormat
 
-	StreamStatus *StreamStatus
+	StreamStatus              *StreamStatus
+	StreamObserver            StreamEventObserver
+	ClientGoneBillingEvidence *ClientGoneBillingEvidence
 
 	ThinkingContentInfo
 	TokenCountMeta

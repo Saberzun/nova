@@ -8,6 +8,7 @@ services:
     image: new-api-mvp:local
     container_name: new-api-mvp
     restart: unless-stopped
+    stop_grace_period: 150s
     command: --log-dir /app/logs
     environment:
       SQL_DSN: postgresql://new_api_mvp:${POSTGRES_PASSWORD}@postgres:5432/new_api_mvp
@@ -19,6 +20,8 @@ services:
       TZ: Asia/Shanghai
       ERROR_LOG_ENABLED: 'true'
       BATCH_UPDATE_ENABLED: 'true'
+      SHUTDOWN_TIMEOUT_SECONDS: '120'
+      CLIENT_GONE_FALLBACK_ENABLED: 'false'
       LEGACY_QUOTA_FROZEN: 'true'
       NODE_NAME: itokenify-mvp
     volumes:

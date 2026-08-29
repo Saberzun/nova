@@ -398,8 +398,18 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, summary.Quota)
 	}
 
+	if evidence := relayInfo.ClientGoneBillingEvidence; evidence != nil {
+		evidence.PreConsumedQuota = relayInfo.FinalPreConsumedQuota
+		if relayInfo.Billing != nil {
+			evidence.PreConsumedQuota = relayInfo.Billing.GetPreConsumedQuota()
+		}
+		evidence.AttemptedSettlementQuota = summary.Quota
+	}
 	if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
+	} else if relayInfo.ClientGoneBillingEvidence != nil {
+		relayInfo.ClientGoneBillingEvidence.SettlementSucceeded = true
+		relayInfo.ClientGoneBillingEvidence.SettledQuota = summary.Quota
 	}
 
 	logModel := summary.ModelName

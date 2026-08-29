@@ -185,6 +185,7 @@ func initConstantEnv() {
 	// ForceStreamOption 覆盖请求参数，强制返回usage信息
 	constant.ForceStreamOption = GetEnvOrDefaultBool("FORCE_STREAM_OPTION", true)
 	constant.CountToken = GetEnvOrDefaultBool("CountToken", true)
+	constant.ClientGoneFallbackEnabled = GetEnvOrDefaultBool("CLIENT_GONE_FALLBACK_ENABLED", false)
 	constant.GetMediaToken = GetEnvOrDefaultBool("GET_MEDIA_TOKEN", true)
 	constant.GetMediaTokenNotStream = GetEnvOrDefaultBool("GET_MEDIA_TOKEN_NOT_STREAM", false)
 	constant.UpdateTask = GetEnvOrDefaultBool("UPDATE_TASK", true)

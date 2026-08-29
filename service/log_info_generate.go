@@ -106,6 +106,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	AppendChannelAffinityAdminInfo(ctx, adminInfo)
+	appendClientGoneBillingEvidence(adminInfo, relayInfo)
 
 	other["admin_info"] = adminInfo
 	appendRequestPath(ctx, relayInfo, other)
@@ -115,6 +116,38 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
 	return other
+}
+
+func appendClientGoneBillingEvidence(adminInfo map[string]interface{}, relayInfo *relaycommon.RelayInfo) {
+	if adminInfo == nil || relayInfo == nil || relayInfo.ClientGoneBillingEvidence == nil {
+		return
+	}
+	evidence := relayInfo.ClientGoneBillingEvidence
+	adminInfo["client_gone_billing"] = map[string]interface{}{
+		"usage_source":                        evidence.UsageSource,
+		"terminal_event_seen":                 evidence.TerminalEventSeen,
+		"received_data_events":                evidence.ReceivedDataEvents,
+		"estimated_prompt_tokens":             evidence.EstimatedPromptTokens,
+		"observed_output_tokens":              evidence.ObservedOutputTokens,
+		"input_tokenizer_model":               evidence.InputTokenizerModel,
+		"output_tokenizer_model":              evidence.OutputTokenizerModel,
+		"authoritative_usage_seen":            evidence.AuthoritativeUsageSeen,
+		"authoritative_usage_valid":           evidence.AuthoritativeUsageValid,
+		"authoritative_usage_reject_reason":   evidence.AuthoritativeUsageRejectReason,
+		"usage_inspection_complete":           evidence.UsageInspectionComplete,
+		"usage_inspection_uncertainty_reason": evidence.UsageInspectionUncertaintyReason,
+		"fallback_eligibility_result":         evidence.FallbackEligibilityResult,
+		"fallback_ineligible_reason":          evidence.FallbackIneligibleReason,
+		"fallback_cache_policy":               evidence.FallbackCachePolicy,
+		"cutoff_sequence":                     evidence.CutoffSequence,
+		"pre_consumed_quota":                  evidence.PreConsumedQuota,
+		"attempted_settlement_quota":          evidence.AttemptedSettlementQuota,
+		"settled_quota":                       evidence.SettledQuota,
+		"settlement_succeeded":                evidence.SettlementSucceeded,
+	}
+	if len(evidence.ObservedOutputCategories) > 0 {
+		adminInfo["client_gone_billing"].(map[string]interface{})["observed_output_categories"] = evidence.ObservedOutputCategories
+	}
 }
 
 func appendParamOverrideInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
@@ -129,21 +162,22 @@ func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other map[string]inter
 		return
 	}
 	ss := relayInfo.StreamStatus
+	snapshot := ss.Snapshot()
 	status := "ok"
-	if !ss.IsNormalEnd() || ss.HasErrors() {
+	if !ss.IsNormalEnd() || snapshot.ErrorCount > 0 {
 		status = "error"
 	}
 	streamInfo := map[string]interface{}{
 		"status":     status,
-		"end_reason": string(ss.EndReason),
+		"end_reason": string(snapshot.EndReason),
 	}
-	if ss.EndError != nil {
-		streamInfo["end_error"] = ss.EndError.Error()
+	if snapshot.EndError != nil {
+		streamInfo["end_error"] = snapshot.EndError.Error()
 	}
-	if ss.ErrorCount > 0 {
-		streamInfo["error_count"] = ss.ErrorCount
-		messages := make([]string, 0, len(ss.Errors))
-		for _, e := range ss.Errors {
+	if snapshot.ErrorCount > 0 {
+		streamInfo["error_count"] = snapshot.ErrorCount
+		messages := make([]string, 0, len(snapshot.Errors))
+		for _, e := range snapshot.Errors {
 			messages = append(messages, e.Message)
 		}
 		streamInfo["errors"] = messages

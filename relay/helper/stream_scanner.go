@@ -265,12 +265,18 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			if !strings.HasPrefix(data, "[DONE]") {
 				info.SetFirstResponseTime()
 				info.ReceivedResponseCount++
+				if !info.StreamStatus.ObserveEvent(info.StreamObserver, data) {
+					return
+				}
+				eventDelivered := false
 
 				select {
 				case dataChan <- data:
+					eventDelivered = true
 				case <-ctx.Done():
-					return
 				case <-stopChan:
+				}
+				if !eventDelivered {
 					return
 				}
 			} else {
@@ -294,10 +300,11 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	case <-ticker.C:
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
 	case <-stopChan:
-		// EndReason already set by the goroutine that triggered stopChan
+	// EndReason already set by the goroutine that triggered stopChan
 	case <-c.Request.Context().Done():
 		// 客户端断开：立即 cleanup 关闭上游 resp.Body，解除 scanner 阻塞并让上游停止生成，
 		// 避免为已放弃的请求继续消费上游 token。
+		info.StreamStatus.FreezeCutoffWithObserver(info.StreamObserver)
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
 	}
 
