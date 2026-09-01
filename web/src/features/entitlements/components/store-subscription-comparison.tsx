@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { formatQuota } from '@/lib/format'
 
 import {
+  formatAccessGroupLabel,
   getSKUAccessGroups,
   isSKUAvailable,
   maximumSKUQuantity,
@@ -29,6 +30,7 @@ interface StoreSubscriptionComparisonProps {
   items: StoreCatalogItem[]
   loading: boolean
   onPurchase: (sku: ProductSKU, quantity: number) => void
+  groupRatios?: Record<string, number>
 }
 
 function formatValidity(
@@ -63,6 +65,7 @@ export function StoreSubscriptionComparison(
             sku={item.sku}
             loading={props.loading}
             onPurchase={props.onPurchase}
+            groupRatios={props.groupRatios}
           />
         ))}
       </div>
@@ -125,7 +128,10 @@ export function StoreSubscriptionComparison(
                       {groups.length > 0 ? (
                         groups.map((group) => (
                           <Badge key={group} variant='secondary'>
-                            {group}
+                            {formatAccessGroupLabel(
+                              group,
+                              props.groupRatios ?? {}
+                            )}
                           </Badge>
                         ))
                       ) : (

@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { formatQuota } from '@/lib/format'
 
 import {
+  formatAccessGroupLabel,
   getSKUAccessGroups,
   isSKUAvailable,
   maximumSKUQuantity,
@@ -34,6 +35,7 @@ interface StoreSKUCardProps {
   sku: ProductSKU
   loading: boolean
   onPurchase: (sku: ProductSKU, quantity: number) => void
+  groupRatios?: Record<string, number>
 }
 
 function getActivationLabelKey(policy: ProductSKU['activation_policy']) {
@@ -80,7 +82,7 @@ export function StoreSKUCard(props: StoreSKUCardProps) {
             {accessGroups.length > 0 ? (
               accessGroups.map((group) => (
                 <Badge key={group} variant='secondary'>
-                  {group}
+                  {formatAccessGroupLabel(group, props.groupRatios ?? {})}
                 </Badge>
               ))
             ) : (

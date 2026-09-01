@@ -54,6 +54,18 @@ export function getSKUAccessGroups(sku: ProductSKU): string[] {
     .filter(Boolean)
 }
 
+export function formatAccessGroupLabel(
+  group: string,
+  groupRatios: Record<string, number>
+): string {
+  const ratio = groupRatios[group]
+  if (ratio == null || !Number.isFinite(ratio)) return group
+  const formatted = Number.isInteger(ratio)
+    ? ratio.toString()
+    : ratio.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+  return `${group} x${formatted}`
+}
+
 export function buildStoreCatalog(products: Product[]): StoreCatalog {
   const catalog: StoreCatalog = { recharge: [], subscription: [] }
   const orderedProducts = [...products].sort(

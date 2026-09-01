@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import { SectionPageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { getUserGroups } from '@/lib/api'
 
 import {
   cancelStoreOrder,
@@ -76,6 +77,19 @@ export function EntitlementStore(props: EntitlementStoreProps) {
   const products = useQuery({
     queryKey: ['entitlement-store', 'products'],
     queryFn: getStoreProducts,
+  })
+  const groupRatios = useQuery({
+    queryKey: ['entitlement-store', 'group-ratios'],
+    queryFn: getUserGroups,
+    staleTime: 5 * 60 * 1000,
+    select: (response) => {
+      if (!response.success || !response.data) return {}
+      return Object.fromEntries(
+        Object.entries(response.data).flatMap(([group, info]) =>
+          typeof info.ratio === 'number' ? [[group, info.ratio]] : []
+        )
+      )
+    },
   })
   const orders = useQuery({
     queryKey: ['entitlement-store', 'orders'],
@@ -388,6 +402,7 @@ export function EntitlementStore(props: EntitlementStoreProps) {
                 <StoreSubscriptionComparison
                   items={catalog.subscription}
                   loading={purchase.isPending}
+                  groupRatios={groupRatios.data ?? {}}
                   onPurchase={(sku, quantity) => {
                     setPaymentChannel('online')
                     setOnlinePaymentMethod('')
