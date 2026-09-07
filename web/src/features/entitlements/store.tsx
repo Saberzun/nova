@@ -357,13 +357,14 @@ export function EntitlementStore(props: EntitlementStoreProps) {
                 </p>
               </div>
               {catalog.recharge.length > 0 ? (
-                <div className='grid gap-4 lg:grid-cols-2'>
+                <div className='space-y-4'>
                   {catalog.recharge.map((item) => (
                     <StoreRechargeCard
                       key={item.sku.id}
                       product={item.product}
                       sku={item.sku}
                       loading={purchase.isPending}
+                      groupRatios={groupRatios.data ?? {}}
                       onPurchase={(sku, amountMinor) => {
                         setPaymentChannel('online')
                         setOnlinePaymentMethod('')
