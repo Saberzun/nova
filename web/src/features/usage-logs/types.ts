@@ -114,6 +114,18 @@ export interface LogOtherData {
     local_count_tokens?: boolean
     usage_billing_path?: UsageBillingPath | string
     channel_affinity?: ChannelAffinityInfo
+    upstream_error?: {
+      status_code?: number
+      error_type?: string
+      error_code?: string
+      message?: string
+      upstream_request_id?: string
+      channel_id?: number
+      channel_name?: string
+      channel_type?: number
+      public_status_code?: number
+      public_error_code?: string
+    }
     // Top-up audit fields (type=1, admin only)
     payment_method?: string
     callback_payment_method?: string

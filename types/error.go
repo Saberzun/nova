@@ -77,6 +77,11 @@ const (
 	ErrorCodeAwsInvokeError         ErrorCode = "aws_invoke_error"
 	ErrorCodeModelNotFound          ErrorCode = "model_not_found"
 	ErrorCodePromptBlocked          ErrorCode = "prompt_blocked"
+	ErrorCodeInvalidModelRequest    ErrorCode = "invalid_model_request"
+	ErrorCodeContentPolicyRejected  ErrorCode = "content_policy_rejected"
+	ErrorCodeUpstreamRateLimited    ErrorCode = "upstream_rate_limited"
+	ErrorCodeUpstreamTimeout        ErrorCode = "upstream_timeout"
+	ErrorCodeUpstreamServiceError   ErrorCode = "upstream_service_error"
 
 	// sql error
 	ErrorCodeQueryDataError  ErrorCode = "query_data_error"
@@ -175,6 +180,14 @@ func (e *NewAPIError) MaskSensitiveErrorWithStatusCode() string {
 
 func (e *NewAPIError) SetMessage(message string) {
 	e.Err = errors.New(message)
+	switch relayError := e.RelayError.(type) {
+	case OpenAIError:
+		relayError.Message = message
+		e.RelayError = relayError
+	case ClaudeError:
+		relayError.Message = message
+		e.RelayError = relayError
+	}
 }
 
 func (e *NewAPIError) ToOpenAIError() OpenAIError {

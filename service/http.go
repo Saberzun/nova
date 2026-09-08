@@ -32,13 +32,50 @@ func ShouldCopyUpstreamHeader(c *gin.Context, k string, v []string) bool {
 	if strings.EqualFold(k, "Content-Length") {
 		return false
 	}
-	if strings.EqualFold(k, common.RequestIdKey) {
+	if isUpstreamRequestIDHeader(k) {
 		if c != nil && len(v) > 0 {
-			c.Set(common.UpstreamRequestIdKey, v[0])
+			if c.GetString(common.UpstreamRequestIdKey) == "" {
+				c.Set(common.UpstreamRequestIdKey, v[0])
+			}
 		}
 		return false
 	}
 	return true
+}
+
+func isUpstreamRequestIDHeader(name string) bool {
+	for _, candidate := range []string{
+		common.RequestIdKey,
+		"X-Request-Id",
+		"Request-Id",
+		"X-Amzn-Requestid",
+		"X-Goog-Request-Id",
+	} {
+		if strings.EqualFold(name, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+// CaptureUpstreamResponseMetadata keeps provider diagnostics server-side.
+// Request IDs are never copied back to clients by ShouldCopyUpstreamHeader.
+func CaptureUpstreamResponseMetadata(c *gin.Context, resp *http.Response) {
+	if c == nil || resp == nil {
+		return
+	}
+	c.Set(common.UpstreamStatusCodeKey, resp.StatusCode)
+	for name, values := range resp.Header {
+		if isUpstreamRequestIDHeader(name) && len(values) > 0 && values[0] != "" {
+			if c.GetString(common.UpstreamRequestIdKey) == "" {
+				c.Set(common.UpstreamRequestIdKey, values[0])
+			}
+			break
+		}
+	}
+	if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+		c.Set(common.UpstreamRetryAfterKey, retryAfter)
+	}
 }
 
 func IOCopyBytesGracefully(c *gin.Context, src *http.Response, data []byte) {

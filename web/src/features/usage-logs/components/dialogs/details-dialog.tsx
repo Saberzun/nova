@@ -780,6 +780,49 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </DetailSection>
         )}
 
+        {/* Original upstream diagnostics are available to administrators only. */}
+        {props.isAdmin && other?.admin_info?.upstream_error && (
+          <DetailSection
+            icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
+            label={t('Upstream Error Diagnostics')}
+            variant='danger'
+          >
+            <DetailRow
+              label={t('Status Code')}
+              value={String(other.admin_info.upstream_error.status_code ?? '')}
+              mono
+            />
+            {other.admin_info.upstream_error.error_type && (
+              <DetailRow
+                label={t('Type')}
+                value={other.admin_info.upstream_error.error_type}
+                mono
+              />
+            )}
+            {other.admin_info.upstream_error.error_code && (
+              <DetailRow
+                label={t('Code')}
+                value={other.admin_info.upstream_error.error_code}
+                mono
+              />
+            )}
+            {other.admin_info.upstream_error.upstream_request_id && (
+              <DetailRow
+                label={t('Upstream Request ID')}
+                value={other.admin_info.upstream_error.upstream_request_id}
+                mono
+              />
+            )}
+            {other.admin_info.upstream_error.message && (
+              <DetailRow
+                label={t('Content')}
+                value={other.admin_info.upstream_error.message}
+                mono
+              />
+            )}
+          </DetailSection>
+        )}
+
         {/* Quota saturation marker (admin only) */}
         {props.isAdmin && other?.admin_info?.quota_saturation && (
           <DetailSection

@@ -72,8 +72,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	//originalModel := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
 
 	var (
-		newAPIError *types.NewAPIError
-		ws          *websocket.Conn
+		newAPIError        *types.NewAPIError
+		publicAPIError     *types.NewAPIError
+		finalUpstreamError bool
+		relayInfo          *relaycommon.RelayInfo
+		ws                 *websocket.Conn
 	)
 
 	if relayFormat == types.RelayFormatOpenAIRealtime {
@@ -89,18 +92,44 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	defer func() {
 		if newAPIError != nil {
 			logger.LogError(c, fmt.Sprintf("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
-			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
+			responseError := newAPIError
+			if publicAPIError != nil {
+				responseError = publicAPIError
+			}
+			if responseError.StatusCode == http.StatusTooManyRequests {
+				if retryAfter := c.GetString(common.UpstreamRetryAfterKey); retryAfter != "" {
+					c.Header("Retry-After", retryAfter)
+				}
+			}
+			responseError.SetMessage(common.MessageWithRequestId(responseError.Error(), requestId))
+			if relayInfo != nil && relayInfo.IsStream && c.Writer.Written() && relayFormat != types.RelayFormatOpenAIRealtime {
+				switch relayFormat {
+				case types.RelayFormatClaude:
+					_ = helper.ClaudeData(c, dto.ClaudeResponse{
+						Type:  "error",
+						Error: responseError.ToClaudeError(),
+					})
+				case types.RelayFormatOpenAIResponses, types.RelayFormatOpenAIResponsesCompaction:
+					payload, marshalErr := common.Marshal(gin.H{"error": responseError.ToOpenAIError()})
+					if marshalErr == nil {
+						_ = helper.ResponseChunkData(c, dto.ResponsesStreamResponse{Type: "error"}, string(payload))
+					}
+				default:
+					_ = helper.ObjectData(c, gin.H{"error": responseError.ToOpenAIError()})
+				}
+				return
+			}
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
-				helper.WssError(c, ws, newAPIError.ToOpenAIError())
+				helper.WssError(c, ws, responseError.ToOpenAIError())
 			case types.RelayFormatClaude:
-				c.JSON(newAPIError.StatusCode, gin.H{
+				c.JSON(responseError.StatusCode, gin.H{
 					"type":  "error",
-					"error": newAPIError.ToClaudeError(),
+					"error": responseError.ToClaudeError(),
 				})
 			default:
-				c.JSON(newAPIError.StatusCode, gin.H{
-					"error": newAPIError.ToOpenAIError(),
+				c.JSON(responseError.StatusCode, gin.H{
+					"error": responseError.ToOpenAIError(),
 				})
 			}
 		}
@@ -117,7 +146,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
-	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
+	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
@@ -209,6 +238,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
+		c.Set(common.UpstreamRequestAttemptedKey, false)
+		c.Set(common.UpstreamRequestIdKey, "")
+		c.Set(common.UpstreamRetryAfterKey, "")
+		c.Set(common.UpstreamStatusCodeKey, 0)
 
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
@@ -228,10 +261,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
+		attemptReachedUpstream := c.GetBool(common.UpstreamRequestAttemptedKey)
+		finalUpstreamError = attemptReachedUpstream
 
-		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+		willRetry := shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry())
+		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, !willRetry, attemptReachedUpstream)
 
-		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
+		if !willRetry {
 			break
 		}
 	}
@@ -242,6 +278,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		logger.LogInfo(c, retryLogStr)
 	}
 	if newAPIError != nil {
+		if finalUpstreamError {
+			publicAPIError = types.ProjectUpstreamErrorWithStatus(newAPIError, c.GetInt(common.UpstreamStatusCodeKey))
+		}
 		gopool.Go(func() {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
@@ -354,8 +393,12 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	return operation_setting.ShouldRetryByStatusCode(code)
 }
 
-func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
-	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.Error())))
+func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, recordErrorLog bool, filterUpstreamError bool) {
+	loggedStatusCode := err.StatusCode
+	if filterUpstreamError && c.GetInt(common.UpstreamStatusCodeKey) != 0 {
+		loggedStatusCode = c.GetInt(common.UpstreamStatusCodeKey)
+	}
+	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, loggedStatusCode, common.LocalLogPreview(err.Error())))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
 	if service.ShouldDisableChannel(err) && channelError.AutoBan {
@@ -364,26 +407,42 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		})
 	}
 
-	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
+	if recordErrorLog && constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
 		// 保存错误日志到mysql中
 		userId := c.GetInt("id")
 		tokenName := c.GetString("token_name")
 		modelName := c.GetString("original_model")
 		tokenId := c.GetInt("token_id")
 		userGroup := c.GetString("group")
-		channelId := c.GetInt("channel_id")
+		channelId := channelError.ChannelId
+		publicErr := err
+		if filterUpstreamError {
+			publicErr = types.ProjectUpstreamErrorWithStatus(err, c.GetInt(common.UpstreamStatusCodeKey))
+		}
 		other := make(map[string]interface{})
 		if c.Request != nil && c.Request.URL != nil {
 			other["request_path"] = c.Request.URL.Path
 		}
-		other["error_type"] = err.GetErrorType()
-		other["error_code"] = err.GetErrorCode()
-		other["status_code"] = err.StatusCode
-		other["channel_id"] = channelId
-		other["channel_name"] = c.GetString("channel_name")
-		other["channel_type"] = c.GetInt("channel_type")
 		adminInfo := make(map[string]interface{})
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
+		if filterUpstreamError {
+			upstreamStatusCode := c.GetInt(common.UpstreamStatusCodeKey)
+			if upstreamStatusCode == 0 {
+				upstreamStatusCode = err.StatusCode
+			}
+			adminInfo["upstream_error"] = map[string]interface{}{
+				"status_code":         upstreamStatusCode,
+				"error_type":          err.GetErrorType(),
+				"error_code":          err.GetErrorCode(),
+				"message":             common.LocalLogPreview(err.MaskSensitiveError()),
+				"upstream_request_id": c.GetString(common.UpstreamRequestIdKey),
+				"channel_id":          channelError.ChannelId,
+				"channel_name":        channelError.ChannelName,
+				"channel_type":        channelError.ChannelType,
+				"public_status_code":  publicErr.StatusCode,
+				"public_error_code":   publicErr.GetErrorCode(),
+			}
+		}
 		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
 		if isMultiKey {
 			adminInfo["is_multi_key"] = true
@@ -396,7 +455,8 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
+		content := common.MessageWithRequestId(publicErr.ErrorWithStatusCode(), c.GetString(common.RequestIdKey))
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, content, tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
 	}
 
 }
@@ -429,18 +489,20 @@ func RelayMidjourney(c *gin.Context) {
 	//err = relayMidjourneySubmit(c, relayMode)
 	log.Println(mjErr)
 	if mjErr != nil {
-		statusCode := http.StatusBadRequest
+		originalMessage := fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)
+		statusCode := http.StatusBadGateway
 		if mjErr.Code == 30 {
-			mjErr.Result = "当前分组负载已饱和，请稍后再试，或升级账户以提升服务质量。"
 			statusCode = http.StatusTooManyRequests
 		}
-		c.JSON(statusCode, gin.H{
-			"description": fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result),
+		originalErr := types.NewOpenAIError(errors.New(originalMessage), types.ErrorCodeBadResponseStatusCode, statusCode)
+		publicErr := types.ProjectUpstreamError(originalErr)
+		c.JSON(publicErr.StatusCode, gin.H{
+			"description": common.MessageWithRequestId(publicErr.Error(), c.GetString(common.RequestIdKey)),
 			"type":        "upstream_error",
-			"code":        mjErr.Code,
+			"code":        publicErr.GetErrorCode(),
 		})
 		channelId := c.GetInt("channel_id")
-		logger.LogError(c, fmt.Sprintf("relay error (channel #%d, status code %d): %s", channelId, statusCode, fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)))
+		logger.LogError(c, fmt.Sprintf("relay error (channel #%d, status code %d): %s", channelId, statusCode, common.LocalLogPreview(originalMessage)))
 	}
 }
 
@@ -478,8 +540,9 @@ func RelayTaskFetch(c *gin.Context) {
 		})
 		return
 	}
+	c.Set(common.UpstreamRequestAttemptedKey, false)
 	if taskErr := relay.RelayTaskFetch(c, relayInfo.RelayMode); taskErr != nil {
-		respondTaskError(c, taskErr)
+		respondTaskError(c, taskErr, c.GetBool(common.UpstreamRequestAttemptedKey))
 	}
 }
 
@@ -495,12 +558,13 @@ func RelayTask(c *gin.Context) {
 	}
 
 	if taskErr := relay.ResolveOriginTask(c, relayInfo); taskErr != nil {
-		respondTaskError(c, taskErr)
+		respondTaskError(c, taskErr, false)
 		return
 	}
 
 	var result *relay.TaskSubmitResult
 	var taskErr *dto.TaskError
+	var taskErrUpstream bool
 	defer func() {
 		if taskErr != nil && relayInfo.Billing != nil {
 			relayInfo.Billing.Refund(c)
@@ -548,19 +612,33 @@ func RelayTask(c *gin.Context) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
+		c.Set(common.UpstreamRequestAttemptedKey, false)
+		c.Set(common.UpstreamRequestIdKey, "")
+		c.Set(common.UpstreamRetryAfterKey, "")
+		c.Set(common.UpstreamStatusCodeKey, 0)
 		result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
 		if taskErr == nil {
 			break
 		}
+		taskErrUpstream = c.GetBool(common.UpstreamRequestAttemptedKey)
 
+		willRetry := shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-retryParam.GetRetry())
 		if !taskErr.LocalError {
+			errorCode := types.ErrorCode(taskErr.Code)
+			if errorCode == "" {
+				errorCode = types.ErrorCodeBadResponseStatusCode
+			}
+			originalTaskError := taskErr.Error
+			if originalTaskError == nil {
+				originalTaskError = errors.New(taskErr.Message)
+			}
 			processChannelError(c,
 				*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey,
 					common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()),
-				types.NewOpenAIError(taskErr.Error, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode))
+				types.NewOpenAIError(originalTaskError, errorCode, taskErr.StatusCode), !willRetry, taskErrUpstream)
 		}
 
-		if !shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-retryParam.GetRetry()) {
+		if !willRetry {
 			break
 		}
 	}
@@ -601,16 +679,24 @@ func RelayTask(c *gin.Context) {
 	}
 
 	if taskErr != nil {
-		respondTaskError(c, taskErr)
+		respondTaskError(c, taskErr, taskErrUpstream)
 	}
 }
 
 // respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）
-func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
-	if taskErr.StatusCode == http.StatusTooManyRequests {
-		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
+func respondTaskError(c *gin.Context, taskErr *dto.TaskError, upstreamError bool) {
+	responseError := *taskErr
+	if upstreamError && !taskErr.LocalError {
+		original := taskErr.Error
+		if original == nil {
+			original = errors.New(taskErr.Message)
+		}
+		publicErr := types.ProjectUpstreamErrorWithStatus(types.NewOpenAIError(original, types.ErrorCode(taskErr.Code), taskErr.StatusCode), c.GetInt(common.UpstreamStatusCodeKey))
+		responseError.Code = string(publicErr.GetErrorCode())
+		responseError.Message = common.MessageWithRequestId(publicErr.Error(), c.GetString(common.RequestIdKey))
+		responseError.StatusCode = publicErr.StatusCode
 	}
-	c.JSON(taskErr.StatusCode, taskErr)
+	c.JSON(responseError.StatusCode, &responseError)
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {
