@@ -49,6 +49,16 @@ func TestProjectUpstreamErrorUsesObservedStatusBeforeChannelMapping(t *testing.T
 	require.Equal(t, ErrorCodeUpstreamRateLimited, projected.GetErrorCode())
 }
 
+func TestProjectUpstreamLegalRestrictionUsesObservedStatusBeforeChannelMapping(t *testing.T) {
+	original := NewOpenAIError(errors.New("provider legal restriction"), "invalid_request_body", http.StatusBadRequest)
+
+	projected := ProjectUpstreamErrorWithStatus(original, http.StatusUnavailableForLegalReasons)
+
+	require.Equal(t, http.StatusUnavailableForLegalReasons, projected.StatusCode)
+	require.Equal(t, ErrorCodeUpstreamLegalRestriction, projected.GetErrorCode())
+	require.Equal(t, "请求因法律或地区合规限制无法处理", projected.Error())
+}
+
 func TestProjectUpstreamErrorKeepsOnlySafeRetrySemantics(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -59,6 +69,15 @@ func TestProjectUpstreamErrorKeepsOnlySafeRetrySemantics(t *testing.T) {
 		wantStatus  int
 		wantMessage string
 	}{
+		{
+			name:        "legal restriction",
+			errorCode:   "provider_policy",
+			statusCode:  http.StatusUnavailableForLegalReasons,
+			message:     "blocked in region by secret provider policy",
+			wantCode:    ErrorCodeUpstreamLegalRestriction,
+			wantStatus:  http.StatusUnavailableForLegalReasons,
+			wantMessage: "请求因法律或地区合规限制无法处理",
+		},
 		{
 			name:        "rate limit",
 			errorCode:   "rate_limit_exceeded",

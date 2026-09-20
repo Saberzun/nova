@@ -96,6 +96,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			if publicAPIError != nil {
 				responseError = publicAPIError
 			}
+			setPublicErrorResponseHeaders(c, responseError.StatusCode)
 			if responseError.StatusCode == http.StatusTooManyRequests {
 				if retryAfter := c.GetString(common.UpstreamRetryAfterKey); retryAfter != "" {
 					c.Header("Retry-After", retryAfter)
@@ -696,7 +697,14 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError, upstreamError bool
 		responseError.Message = common.MessageWithRequestId(publicErr.Error(), c.GetString(common.RequestIdKey))
 		responseError.StatusCode = publicErr.StatusCode
 	}
+	setPublicErrorResponseHeaders(c, responseError.StatusCode)
 	c.JSON(responseError.StatusCode, &responseError)
+}
+
+func setPublicErrorResponseHeaders(c *gin.Context, statusCode int) {
+	if statusCode == http.StatusUnavailableForLegalReasons {
+		c.Header("Cache-Control", "no-store")
+	}
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {

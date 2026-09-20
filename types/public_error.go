@@ -25,6 +25,7 @@ const (
 	publicContentPolicyMessage       = "请求内容未通过安全检查"
 	publicUpstreamRateLimitedMessage = "上游服务繁忙，请稍后重试"
 	publicUpstreamTimeoutMessage     = "上游服务响应超时，请稍后重试"
+	publicUpstreamLegalMessage       = "请求因法律或地区合规限制无法处理"
 	publicUpstreamServiceMessage     = "上游服务异常，请稍后重试"
 )
 
@@ -65,7 +66,11 @@ func ProjectUpstreamErrorWithStatus(original *NewAPIError, upstreamStatusCode in
 	publicCode := ErrorCodeUpstreamServiceError
 	message := publicUpstreamServiceMessage
 
-	if _, ok := safeUpstreamRequestErrorCodes[original.GetErrorCode()]; ok {
+	if upstreamStatusCode == http.StatusUnavailableForLegalReasons {
+		statusCode = http.StatusUnavailableForLegalReasons
+		publicCode = ErrorCodeUpstreamLegalRestriction
+		message = publicUpstreamLegalMessage
+	} else if _, ok := safeUpstreamRequestErrorCodes[original.GetErrorCode()]; ok {
 		statusCode = http.StatusBadRequest
 		publicCode = ErrorCodeInvalidModelRequest
 		message = publicInvalidModelRequestMessage

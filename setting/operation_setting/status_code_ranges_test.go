@@ -74,10 +74,15 @@ func TestShouldRetryByStatusCode_DefaultMatchesLegacyBehavior(t *testing.T) {
 	require.True(t, ShouldRetryByStatusCode(401))
 	require.False(t, ShouldRetryByStatusCode(408))
 	require.True(t, ShouldRetryByStatusCode(429))
+	require.True(t, ShouldRetryByStatusCode(451))
 	require.True(t, ShouldRetryByStatusCode(500))
 	require.False(t, ShouldRetryByStatusCode(504))
 	require.False(t, ShouldRetryByStatusCode(524))
 	require.True(t, ShouldRetryByStatusCode(599))
+}
+
+func TestUpstream451DoesNotDisableChannelByDefault(t *testing.T) {
+	require.False(t, ShouldDisableByStatusCode(451))
 }
 
 func TestIsAlwaysSkipRetryStatusCode(t *testing.T) {

@@ -35,6 +35,7 @@ func TestRespondTaskErrorFiltersOnlyUpstreamErrors(t *testing.T) {
 		}, true)
 
 		require.Equal(t, http.StatusBadGateway, recorder.Code)
+		require.Empty(t, recorder.Header().Get("Cache-Control"))
 		require.Contains(t, recorder.Body.String(), "upstream_service_error")
 		require.Contains(t, recorder.Body.String(), "local-request-id")
 		require.NotContains(t, recorder.Body.String(), "provider account")
@@ -54,5 +55,25 @@ func TestRespondTaskErrorFiltersOnlyUpstreamErrors(t *testing.T) {
 
 		require.Equal(t, http.StatusForbidden, recorder.Code)
 		require.Contains(t, recorder.Body.String(), "本地权限不足")
+	})
+
+	t.Run("upstream legal restriction keeps safe semantics and disables caching", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Set(common.RequestIdKey, "local-request-id")
+
+		respondTaskError(c, &dto.TaskError{
+			Code:       "provider_policy",
+			Message:    "blocked in region by secret provider policy",
+			StatusCode: http.StatusUnavailableForLegalReasons,
+			Error:      errors.New("blocked in region by secret provider policy"),
+		}, true)
+
+		require.Equal(t, http.StatusUnavailableForLegalReasons, recorder.Code)
+		require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
+		require.Contains(t, recorder.Body.String(), "upstream_legal_restriction")
+		require.Contains(t, recorder.Body.String(), "请求因法律或地区合规限制无法处理")
+		require.Contains(t, recorder.Body.String(), "local-request-id")
+		require.NotContains(t, recorder.Body.String(), "secret provider")
 	})
 }
