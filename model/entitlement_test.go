@@ -131,6 +131,79 @@ func TestEntitlementSharedGroupsDynamicPolicyAndFundingIsolation(t *testing.T) {
 	assert.Len(t, logs, 2)
 }
 
+func TestPauseEntitlementStopsUsageWithoutExtendingValidity(t *testing.T) {
+	resetEntitlementFixtures(t)
+	entitlementType := seedEntitlementType(t, "pause-sub", EntitlementAssetSubscription, "pause-sub")
+	entitlement := seedEntitlement(t, 303, entitlementType.Id, entitlementType.AssetKind, 100, 0, 0)
+	originalExpireAt := entitlement.ExpireAt
+
+	require.NoError(t, PauseEntitlement(entitlement.Id))
+	require.NoError(t, DB.First(&entitlement, entitlement.Id).Error)
+	assert.Equal(t, EntitlementStatePaused, entitlement.State)
+	assert.Equal(t, originalExpireAt, entitlement.ExpireAt)
+
+	_, err := PreConsumeEntitlements("paused-request", 303, 1, "pause-sub", EntitlementAssetSubscription, "gpt-5", 1)
+	require.ErrorIs(t, err, ErrEntitlementQuotaInsufficient)
+
+	require.NoError(t, ResumeEntitlement(entitlement.Id))
+	require.NoError(t, DB.First(&entitlement, entitlement.Id).Error)
+	assert.Equal(t, EntitlementStateActive, entitlement.State)
+	assert.Equal(t, originalExpireAt, entitlement.ExpireAt)
+}
+
+func TestPausedEntitlementExpiresOnOriginalSchedule(t *testing.T) {
+	resetEntitlementFixtures(t)
+	entitlementType := seedEntitlementType(t, "expiring-pause-sub", EntitlementAssetSubscription)
+	entitlement := seedEntitlement(t, 304, entitlementType.Id, entitlementType.AssetKind, 100, 0, 0)
+	require.NoError(t, PauseEntitlement(entitlement.Id))
+	require.NoError(t, DB.Model(&entitlement).Update("expire_at", GetDBTimestamp()-1).Error)
+
+	require.NoError(t, RefreshUserEntitlementStates(entitlement.UserId))
+	require.NoError(t, DB.First(&entitlement, entitlement.Id).Error)
+	assert.Equal(t, EntitlementStateExpired, entitlement.State)
+}
+
+func TestGrantProductSKUEntitlementUsesSKUConfiguration(t *testing.T) {
+	resetEntitlementFixtures(t)
+	entitlementType := seedEntitlementType(t, "admin-sku-sub", EntitlementAssetSubscription)
+	product := Product{Code: "admin-sku-product", Name: "Admin SKU Product", Category: ProductCategorySubscription, Status: ProductStatusActive}
+	require.NoError(t, DB.Create(&product).Error)
+	sku := ProductSKU{
+		Code: "admin-sku", ProductId: product.Id, EntitlementTypeId: entitlementType.Id,
+		Name: "Admin SKU", GrantTotalQuota: 123, GrantDailyQuota: 45,
+		ValiditySeconds: 3600, ActivationPolicy: ActivationPolicyImmediate, Status: ProductStatusActive,
+	}
+	require.NoError(t, DB.Create(&sku).Error)
+
+	entitlement, err := GrantProductSKUEntitlement(305, sku.Id, 1)
+	require.NoError(t, err)
+	assert.Equal(t, sku.Id, entitlement.SKUId)
+	assert.Equal(t, product.Id, entitlement.ProductId)
+	assert.EqualValues(t, 123, entitlement.TotalQuota)
+	assert.EqualValues(t, 45, entitlement.DailyQuota)
+	assert.Equal(t, EntitlementStateActive, entitlement.State)
+	assert.EqualValues(t, 3600, entitlement.ExpireAt-entitlement.StartAt)
+}
+
+func TestDeleteProductSKURejectsReferencedSKU(t *testing.T) {
+	resetEntitlementFixtures(t)
+	entitlementType := seedEntitlementType(t, "delete-sku-sub", EntitlementAssetSubscription)
+	product := Product{Code: "delete-sku-product", Name: "Delete SKU Product", Category: ProductCategorySubscription, Status: ProductStatusActive}
+	require.NoError(t, DB.Create(&product).Error)
+	unusedSKU := ProductSKU{Code: "unused-sku", ProductId: product.Id, EntitlementTypeId: entitlementType.Id, Name: "Unused", GrantTotalQuota: 1, ValiditySeconds: 60, ActivationPolicy: ActivationPolicyImmediate, Status: ProductStatusActive}
+	require.NoError(t, DB.Create(&unusedSKU).Error)
+	require.NoError(t, DeleteProductSKU(unusedSKU.Id))
+	assert.ErrorIs(t, DB.First(&ProductSKU{}, unusedSKU.Id).Error, gorm.ErrRecordNotFound)
+
+	referencedSKU := ProductSKU{Code: "referenced-sku", ProductId: product.Id, EntitlementTypeId: entitlementType.Id, Name: "Referenced", GrantTotalQuota: 1, ValiditySeconds: 60, ActivationPolicy: ActivationPolicyImmediate, Status: ProductStatusActive}
+	require.NoError(t, DB.Create(&referencedSKU).Error)
+	require.NoError(t, DB.Create(&Entitlement{UserId: 306, EntitlementTypeId: entitlementType.Id, AssetKind: EntitlementAssetSubscription, ProductId: product.Id, SKUId: referencedSKU.Id, TotalQuota: 1}).Error)
+
+	err := DeleteProductSKU(referencedSKU.Id)
+	require.EqualError(t, err, "SKU has order or entitlement records; archive it instead")
+	require.NoError(t, DB.First(&referencedSKU, referencedSKU.Id).Error)
+}
+
 func TestEntitlementDailyLimitAndQuantityFulfillment(t *testing.T) {
 	resetEntitlementFixtures(t)
 	typeSub := seedEntitlementType(t, "daily-sub", EntitlementAssetSubscription, "daily-sub")

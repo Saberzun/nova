@@ -5708,6 +5708,21 @@
     "Confirm receipt of {{amount}} and grant the locked entitlement? This cannot be undone directly.": "Confirm receipt of {{amount}} and grant the locked entitlement? This cannot be undone directly.",
     "Register only after the Enterprise WeChat or bank refund has actually completed.": "Register only after the Enterprise WeChat or bank refund has actually completed.",
     "Collection information has changed since this application was created. Confirm with an administrator before paying.": "Collection information has changed since this application was created. Confirm with an administrator before paying.",
-    "This application is closed. The collection information is retained for audit only; do not transfer money to it.": "This application is closed. The collection information is retained for audit only; do not transfer money to it."
+    "This application is closed. The collection information is retained for audit only; do not transfer money to it.": "This application is closed. The collection information is retained for audit only; do not transfer money to it.",
+    "Delete SKU": "Delete SKU",
+    "SKU deleted": "SKU deleted",
+    "Please select a subscription SKU": "Please select a subscription SKU",
+    "Select subscription SKU": "Select subscription SKU",
+    "Entitlement paused": "Entitlement paused",
+    "Entitlement resumed": "Entitlement resumed",
+    "Pause subscription": "Pause subscription",
+    "Resume subscription": "Resume subscription",
+    "Revoke subscription": "Revoke subscription",
+    "Pausing stops quota usage, but the subscription expiry time will continue to count down. Continue?": "Pausing stops quota usage, but the subscription expiry time will continue to count down. Continue?",
+    "Resume quota usage for this subscription?": "Resume quota usage for this subscription?",
+    "Revoking immediately disables this subscription and cannot be undone. Continue?": "Revoking immediately disables this subscription and cannot be undone. Continue?",
+    "Delete SKU {{name}}? SKUs referenced by orders or user subscriptions cannot be deleted and should be archived instead.": "Delete SKU {{name}}? SKUs referenced by orders or user subscriptions cannot be deleted and should be archived instead.",
+    "Pause": "Pause",
+    "Resume": "Resume"
   }
 }

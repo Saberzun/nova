@@ -5708,6 +5708,21 @@
     "Confirm receipt of {{amount}} and grant the locked entitlement? This cannot be undone directly.": "確認已收到 {{amount}} 並發放已鎖定的權益？此操作無法直接撤銷。",
     "Register only after the Enterprise WeChat or bank refund has actually completed.": "僅在企業微信或銀行卡退款實際完成後登記。",
     "Collection information has changed since this application was created. Confirm with an administrator before paying.": "該申請建立後收款資訊已發生變化，請在付款前與管理員確認。",
-    "This application is closed. The collection information is retained for audit only; do not transfer money to it.": "該申請已關閉，收款資訊僅用於稽核，請勿再向其轉帳。"
+    "This application is closed. The collection information is retained for audit only; do not transfer money to it.": "該申請已關閉，收款資訊僅用於稽核，請勿再向其轉帳。",
+    "Delete SKU": "刪除 SKU",
+    "SKU deleted": "SKU 已刪除",
+    "Please select a subscription SKU": "請選擇訂閱 SKU",
+    "Select subscription SKU": "選擇訂閱 SKU",
+    "Entitlement paused": "使用者方案已暫停",
+    "Entitlement resumed": "使用者方案已恢復",
+    "Pause subscription": "暫停使用者方案",
+    "Resume subscription": "恢復使用者方案",
+    "Revoke subscription": "撤銷使用者方案",
+    "Pausing stops quota usage, but the subscription expiry time will continue to count down. Continue?": "暫停後將停止使用方案額度，但方案有效期仍會繼續計算。是否繼續？",
+    "Resume quota usage for this subscription?": "是否恢復使用此方案的額度？",
+    "Revoking immediately disables this subscription and cannot be undone. Continue?": "撤銷後此方案將立即失效，且無法恢復。是否繼續？",
+    "Delete SKU {{name}}? SKUs referenced by orders or user subscriptions cannot be deleted and should be archived instead.": "確定刪除 SKU {{name}}？已被訂單或使用者方案引用的 SKU 無法刪除，應改為封存。",
+    "Pause": "暫停",
+    "Resume": "恢復"
   }
 }

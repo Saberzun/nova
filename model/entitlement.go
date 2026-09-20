@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -120,7 +121,7 @@ func refreshUserEntitlementStatesTx(tx *gorm.DB, userId int, now int64) error {
 		return nil
 	}
 	if err := tx.Model(&Entitlement{}).
-		Where("user_id = ? AND state IN ? AND expire_at > 0 AND expire_at <= ? AND reserved_quota = 0", userId, []string{EntitlementStateActive, EntitlementStateQueued}, now).
+		Where("user_id = ? AND state IN ? AND expire_at > 0 AND expire_at <= ? AND reserved_quota = 0", userId, []string{EntitlementStateActive, EntitlementStatePaused, EntitlementStateQueued}, now).
 		Update("state", EntitlementStateExpired).Error; err != nil {
 		return err
 	}
@@ -152,7 +153,7 @@ func RefreshDueEntitlementStates(limit int) (int, error) {
 	err := DB.Model(&Entitlement{}).
 		Distinct("user_id").
 		Where("(state IN ? AND expire_at > 0 AND expire_at <= ? AND reserved_quota = 0) OR (state = ? AND activation_deadline > 0 AND activation_deadline <= ?) OR (state = ? AND start_at > 0 AND start_at <= ? AND (expire_at = 0 OR expire_at > ?))",
-			[]string{EntitlementStateActive, EntitlementStateQueued}, now,
+			[]string{EntitlementStateActive, EntitlementStatePaused, EntitlementStateQueued}, now,
 			EntitlementStatePending, now,
 			EntitlementStateQueued, now, now).
 		Order("user_id asc").Limit(limit).Pluck("user_id", &userIds).Error
@@ -219,4 +220,158 @@ func UserCanUseEntitlementGroup(userId int, groupName string) (bool, error) {
 		Limit(1).
 		Count(&count).Error
 	return count > 0, err
+}
+
+func GrantProductSKUEntitlement(userId int, skuId int, operatorId int) (*Entitlement, error) {
+	if userId <= 0 || skuId <= 0 {
+		return nil, errors.New("invalid user or SKU id")
+	}
+	var entitlement *Entitlement
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var sku ProductSKU
+		if err := tx.Where("id = ?", skuId).First(&sku).Error; err != nil {
+			return err
+		}
+		var product Product
+		if err := tx.Where("id = ?", sku.ProductId).First(&product).Error; err != nil {
+			return err
+		}
+		var entitlementType EntitlementType
+		if err := tx.Where("id = ?", sku.EntitlementTypeId).First(&entitlementType).Error; err != nil {
+			return err
+		}
+		if product.Category != ProductCategorySubscription || entitlementType.AssetKind != EntitlementAssetSubscription {
+			return errors.New("SKU is not a subscription")
+		}
+		if product.Status != ProductStatusActive || sku.Status != ProductStatusActive {
+			return errors.New("subscription SKU is not active")
+		}
+		if sku.ValiditySeconds <= 0 || sku.GrantTotalQuota <= 0 {
+			return errors.New("subscription SKU configuration is invalid")
+		}
+
+		now := getDBTimestampTx(tx)
+		state := EntitlementStateActive
+		startAt := now
+		expireAt := now + sku.ValiditySeconds
+		activationDeadline := int64(0)
+		switch sku.ActivationPolicy {
+		case ActivationPolicyManual:
+			state, startAt, expireAt = EntitlementStatePending, 0, 0
+			if sku.ActivationDeadlineSec > 0 {
+				activationDeadline = now + sku.ActivationDeadlineSec
+			}
+		case ActivationPolicyDeferred:
+			var lastExpire int64
+			if err := tx.Model(&Entitlement{}).
+				Where("user_id = ? AND entitlement_type_id = ? AND state IN ?", userId, sku.EntitlementTypeId, []string{EntitlementStateActive, EntitlementStatePaused, EntitlementStateQueued}).
+				Select("COALESCE(MAX(expire_at), 0)").Scan(&lastExpire).Error; err != nil {
+				return err
+			}
+			if lastExpire > startAt {
+				startAt, state = lastExpire, EntitlementStateQueued
+			}
+			expireAt = startAt + sku.ValiditySeconds
+		}
+
+		entitlement = &Entitlement{
+			UserId:             userId,
+			EntitlementTypeId:  sku.EntitlementTypeId,
+			AssetKind:          EntitlementAssetSubscription,
+			ProductId:          product.Id,
+			SKUId:              sku.Id,
+			State:              state,
+			TotalQuota:         sku.GrantTotalQuota,
+			DailyQuota:         sku.GrantDailyQuota,
+			ResetTimezone:      "Asia/Shanghai",
+			StartAt:            startAt,
+			ExpireAt:           expireAt,
+			ActivationDeadline: activationDeadline,
+			SourceType:         "admin",
+			SourceId:           operatorId,
+		}
+		return tx.Create(entitlement).Error
+	})
+	return entitlement, err
+}
+
+func PauseEntitlement(entitlementId int) error {
+	if entitlementId <= 0 {
+		return errors.New("invalid entitlement id")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var entitlement Entitlement
+		if err := lockForUpdate(tx).Where("id = ?", entitlementId).First(&entitlement).Error; err != nil {
+			return err
+		}
+		if entitlement.AssetKind != EntitlementAssetSubscription {
+			return errors.New("only subscription entitlements can be paused")
+		}
+		if entitlement.State == EntitlementStatePaused {
+			return nil
+		}
+		if entitlement.State != EntitlementStateActive {
+			return errors.New("only active subscriptions can be paused")
+		}
+		return tx.Model(&entitlement).Updates(map[string]interface{}{
+			"state":      EntitlementStatePaused,
+			"updated_at": common.GetTimestamp(),
+		}).Error
+	})
+}
+
+func ResumeEntitlement(entitlementId int) error {
+	if entitlementId <= 0 {
+		return errors.New("invalid entitlement id")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var entitlement Entitlement
+		if err := lockForUpdate(tx).Where("id = ?", entitlementId).First(&entitlement).Error; err != nil {
+			return err
+		}
+		if entitlement.AssetKind != EntitlementAssetSubscription {
+			return errors.New("only subscription entitlements can be resumed")
+		}
+		if entitlement.State == EntitlementStateActive {
+			return nil
+		}
+		if entitlement.State != EntitlementStatePaused {
+			return errors.New("only paused subscriptions can be resumed")
+		}
+		now := getDBTimestampTx(tx)
+		state := EntitlementStateActive
+		if entitlement.ExpireAt > 0 && entitlement.ExpireAt <= now {
+			state = EntitlementStateExpired
+		} else if entitlement.UsedQuota+entitlement.ReservedQuota >= entitlement.TotalQuota {
+			state = EntitlementStateDepleted
+		}
+		return tx.Model(&entitlement).Updates(map[string]interface{}{
+			"state":      state,
+			"updated_at": common.GetTimestamp(),
+		}).Error
+	})
+}
+
+func DeleteProductSKU(skuId int) error {
+	if skuId <= 0 {
+		return errors.New("invalid SKU id")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var sku ProductSKU
+		if err := lockForUpdate(tx).Where("id = ?", skuId).First(&sku).Error; err != nil {
+			return err
+		}
+		var orderItemCount int64
+		if err := tx.Model(&ProductOrderItem{}).Where(&ProductOrderItem{SKUId: skuId}).Count(&orderItemCount).Error; err != nil {
+			return err
+		}
+		var entitlementCount int64
+		if err := tx.Model(&Entitlement{}).Where(&Entitlement{SKUId: skuId}).Count(&entitlementCount).Error; err != nil {
+			return err
+		}
+		if orderItemCount > 0 || entitlementCount > 0 {
+			return errors.New("SKU has order or entitlement records; archive it instead")
+		}
+		return tx.Delete(&sku).Error
+	})
 }

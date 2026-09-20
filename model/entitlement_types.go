@@ -17,6 +17,7 @@ const (
 	EntitlementStatePending   = "pending"
 	EntitlementStateQueued    = "queued"
 	EntitlementStateActive    = "active"
+	EntitlementStatePaused    = "paused"
 	EntitlementStateDepleted  = "depleted"
 	EntitlementStateExpired   = "expired"
 	EntitlementStateCancelled = "cancelled"

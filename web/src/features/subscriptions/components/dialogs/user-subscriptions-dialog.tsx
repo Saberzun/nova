@@ -16,29 +16,29 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Ban, Plus, RotateCcw, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import { Ban, Pause, Play, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
-import { ConfirmDialog } from '@/components/confirm-dialog'
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   DataTableRowActionMenu,
   StaticDataTable,
-} from '@/components/data-table'
+} from "@/components/data-table";
 import {
   sideDrawerContentClassName,
   sideDrawerFormClassName,
   sideDrawerHeaderClassName,
-} from '@/components/drawer-layout'
-import { StatusBadge } from '@/components/status-badge'
-import { TableId } from '@/components/table-id'
-import { Button } from '@/components/ui/button'
+} from "@/components/drawer-layout";
+import { StatusBadge } from "@/components/status-badge";
+import { TableId } from "@/components/table-id";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
-} from '@/components/ui/dropdown-menu'
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -46,228 +46,206 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
-import { Switch } from '@/components/ui/switch'
-import { formatQuota } from '@/lib/format'
+} from "@/components/ui/sheet";
+import {
+  getAdminProducts,
+  getUserEntitlements,
+  grantProductSKUEntitlement,
+  pauseEntitlement,
+  resumeEntitlement,
+  revokeEntitlement,
+} from "@/features/entitlements/api";
+import { formatDate } from "@/features/entitlements/lib";
+import type {
+  Entitlement,
+  EntitlementType,
+} from "@/features/entitlements/types";
+import { formatQuota } from "@/lib/format";
 
 import {
-  getAdminPlans,
-  getUserSubscriptions,
-  createUserSubscription,
-  invalidateUserSubscription,
-  deleteUserSubscription,
-  resetUserSubscriptionsByPlan,
-} from '../../api'
-import { formatTimestamp } from '../../lib'
-import type { PlanRecord, UserSubscriptionRecord } from '../../types'
+  buildManagedSubscriptionData,
+  type ManagedSubscriptionSKU,
+} from "../../user-entitlement-management";
 
 interface Props {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  user: { id: number; username?: string } | null
-  onSuccess?: () => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  user: { id: number; username?: string } | null;
+  onSuccess?: () => void;
 }
 
-function SubscriptionStatusBadge(props: {
-  sub: UserSubscriptionRecord['subscription']
-  t: (key: string) => string
-}) {
-  // eslint-disable-next-line react-hooks/purity
-  const now = Date.now() / 1000
-  const isExpired = (props.sub.end_time || 0) > 0 && props.sub.end_time < now
-  const isActive = props.sub.status === 'active' && !isExpired
-  if (isActive) {
-    return (
-      <StatusBadge
-        label={props.t('Active')}
-        variant='success'
-        copyable={false}
-      />
-    )
-  }
-  if (props.sub.status === 'cancelled') {
-    return (
-      <StatusBadge
-        label={props.t('Invalidated')}
-        variant='neutral'
-        copyable={false}
-      />
-    )
-  }
-  return (
-    <StatusBadge
-      label={props.t('Expired')}
-      variant='neutral'
-      copyable={false}
-    />
-  )
-}
+type EntitlementAction = "pause" | "resume" | "revoke";
 
 export function UserSubscriptionsDialog(props: Props) {
-  const { t } = useTranslation()
-  const [loading, setLoading] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [plans, setPlans] = useState<PlanRecord[]>([])
-  const [subs, setSubs] = useState<UserSubscriptionRecord[]>([])
-  const [selectedPlanId, setSelectedPlanId] = useState<string>('')
-  const [resetting, setResetting] = useState(false)
-  const [advanceResetTime, setAdvanceResetTime] = useState(true)
-  const [resetAction, setResetAction] = useState<{
-    planId: number
-    planTitle: string
-  } | null>(null)
-  const [confirmAction, setConfirmAction] = useState<{
-    type: 'invalidate' | 'delete'
-    subId: number
-  } | null>(null)
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
+  const [types, setTypes] = useState<EntitlementType[]>([]);
+  const [subscriptionSKUs, setSubscriptionSKUs] = useState<
+    ManagedSubscriptionSKU[]
+  >([]);
+  const [selectedSKUId, setSelectedSKUId] = useState("");
+  const [pendingAction, setPendingAction] = useState<{
+    type: EntitlementAction;
+    entitlementId: number;
+  } | null>(null);
 
-  const planTitleMap = useMemo(() => {
-    const map = new Map<number, string>()
-    plans.forEach((p) => {
-      if (p.plan.id) map.set(p.plan.id, p.plan.title || `#${p.plan.id}`)
-    })
-    return map
-  }, [plans])
+  const typeMap = useMemo(
+    () => new Map(types.map((type) => [type.id, type])),
+    [types],
+  );
+  const skuMap = useMemo(
+    () => new Map(subscriptionSKUs.map((sku) => [sku.id, sku])),
+    [subscriptionSKUs],
+  );
 
   const loadData = useCallback(async () => {
-    if (!props.user?.id) return
-    setLoading(true)
+    if (!props.user?.id) return;
+    setLoading(true);
     try {
-      const [plansRes, subsRes] = await Promise.all([
-        getAdminPlans(),
-        getUserSubscriptions(props.user.id),
-      ])
-      if (plansRes.success) setPlans(plansRes.data || [])
-      if (subsRes.success) setSubs(subsRes.data || [])
-    } catch {
-      toast.error(t('Loading failed'))
+      const [productsResponse, entitlementsResponse] = await Promise.all([
+        getAdminProducts(),
+        getUserEntitlements(props.user.id),
+      ]);
+      if (!productsResponse.success || !entitlementsResponse.success) {
+        throw new Error(t("Loading failed"));
+      }
+      const managedData = buildManagedSubscriptionData(
+        productsResponse.data ?? [],
+        entitlementsResponse.data ?? { entitlements: [], types: [] },
+      );
+      setSubscriptionSKUs(managedData.subscriptionSKUs);
+      setEntitlements(managedData.entitlements);
+      setTypes(managedData.types);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Loading failed"));
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [props.user?.id, t])
+  }, [props.user?.id, t]);
 
   useEffect(() => {
-    if (props.open && props.user?.id) {
-      setSelectedPlanId('')
-      loadData()
-    }
-  }, [props.open, props.user?.id, loadData])
+    if (!props.open || !props.user?.id) return;
+    setSelectedSKUId("");
+    void loadData();
+  }, [props.open, props.user?.id, loadData]);
 
   const handleCreate = async () => {
-    if (!props.user?.id || !selectedPlanId) {
-      toast.error(t('Please select a subscription plan'))
-      return
+    if (!props.user?.id || !selectedSKUId) {
+      toast.error(t("Please select a subscription SKU"));
+      return;
     }
-    setCreating(true)
+    setCreating(true);
     try {
-      const res = await createUserSubscription(props.user.id, {
-        plan_id: Number(selectedPlanId),
-      })
-      if (res.success) {
-        toast.success(res.data?.message || t('Added successfully'))
-        setSelectedPlanId('')
-        await loadData()
-        props.onSuccess?.()
+      const response = await grantProductSKUEntitlement(
+        props.user.id,
+        Number(selectedSKUId),
+      );
+      if (!response.success) {
+        throw new Error(response.message || t("Operation failed"));
       }
-    } catch {
-      toast.error(t('Request failed'))
+      toast.success(t("Entitlement granted"));
+      setSelectedSKUId("");
+      await loadData();
+      props.onSuccess?.();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("Operation failed"),
+      );
     } finally {
-      setCreating(false)
+      setCreating(false);
     }
-  }
+  };
 
   const handleConfirmAction = async () => {
-    if (!confirmAction) return
+    if (!pendingAction) return;
     try {
-      if (confirmAction.type === 'invalidate') {
-        const res = await invalidateUserSubscription(confirmAction.subId)
-        if (res.success) {
-          toast.success(res.data?.message || t('Has been invalidated'))
-          await loadData()
-          props.onSuccess?.()
-        }
+      let response;
+      if (pendingAction.type === "pause") {
+        response = await pauseEntitlement(pendingAction.entitlementId);
+      } else if (pendingAction.type === "resume") {
+        response = await resumeEntitlement(pendingAction.entitlementId);
       } else {
-        const res = await deleteUserSubscription(confirmAction.subId)
-        if (res.success) {
-          toast.success(t('Deleted'))
-          await loadData()
-          props.onSuccess?.()
-        }
+        response = await revokeEntitlement(pendingAction.entitlementId);
       }
-    } catch {
-      toast.error(t('Operation failed'))
+      if (!response.success) {
+        throw new Error(response.message || t("Operation failed"));
+      }
+      let successMessage = t("Entitlement revoked");
+      if (pendingAction.type === "pause") {
+        successMessage = t("Entitlement paused");
+      } else if (pendingAction.type === "resume") {
+        successMessage = t("Entitlement resumed");
+      }
+      toast.success(successMessage);
+      await loadData();
+      props.onSuccess?.();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("Operation failed"),
+      );
     } finally {
-      setConfirmAction(null)
+      setPendingAction(null);
     }
-  }
+  };
 
-  const handleResetConfirm = async () => {
-    if (!props.user?.id || !resetAction) return
-    setResetting(true)
-    try {
-      const res = await resetUserSubscriptionsByPlan(props.user.id, {
-        plan_id: resetAction.planId,
-        advance_reset_time: advanceResetTime,
-      })
-      if (res.success) {
-        toast.success(
-          t('Reset {{count}} active subscriptions', {
-            count: res.data?.reset_count || 0,
-          })
-        )
-        await loadData()
-        props.onSuccess?.()
-      }
-    } catch {
-      toast.error(t('Operation failed'))
-    } finally {
-      setResetting(false)
-      setResetAction(null)
-    }
+  let actionTitle = t("Revoke subscription");
+  let actionDescription = t(
+    "Revoking immediately disables this subscription and cannot be undone. Continue?",
+  );
+  let actionConfirmText = t("Revoke");
+  if (pendingAction?.type === "pause") {
+    actionTitle = t("Pause subscription");
+    actionDescription = t(
+      "Pausing stops quota usage, but the subscription expiry time will continue to count down. Continue?",
+    );
+    actionConfirmText = t("Pause");
+  } else if (pendingAction?.type === "resume") {
+    actionTitle = t("Resume subscription");
+    actionDescription = t("Resume quota usage for this subscription?");
+    actionConfirmText = t("Resume");
   }
 
   return (
     <>
       <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-        <SheetContent className={sideDrawerContentClassName('sm:max-w-2xl')}>
+        <SheetContent className={sideDrawerContentClassName("sm:max-w-3xl")}>
           <SheetHeader className={sideDrawerHeaderClassName()}>
-            <SheetTitle>{t('User Subscription Management')}</SheetTitle>
+            <SheetTitle>{t("User Subscription Management")}</SheetTitle>
             <SheetDescription>
-              {props.user?.username || '-'} (ID: {props.user?.id || '-'})
+              {props.user?.username || "-"} (ID: {props.user?.id || "-"})
             </SheetDescription>
           </SheetHeader>
 
           <div className={sideDrawerFormClassName()}>
-            <div className='flex gap-2'>
+            <div className="flex gap-2">
               <Select
-                items={plans.map((p) => ({
-                  value: String(p.plan.id),
-                  label: (
-                    <>
-                      {p.plan.title}($
-                      {Number(p.plan.price_amount || 0).toFixed(2)})
-                    </>
-                  ),
+                items={subscriptionSKUs.map((sku) => ({
+                  value: String(sku.id),
+                  label: `${sku.display_name} (¥${(sku.price_amount_minor / 100).toFixed(2)})`,
                 }))}
-                value={selectedPlanId}
-                onValueChange={(v) => v !== null && setSelectedPlanId(v)}
+                value={selectedSKUId}
+                onValueChange={(value) =>
+                  value !== null && setSelectedSKUId(value)
+                }
               >
-                <SelectTrigger className='flex-1'>
-                  <SelectValue placeholder={t('Select subscription plan')} />
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder={t("Select subscription SKU")} />
                 </SelectTrigger>
                 <SelectContent alignItemWithTrigger={false}>
                   <SelectGroup>
-                    {plans.map((p) => (
-                      <SelectItem key={p.plan.id} value={String(p.plan.id)}>
-                        {p.plan.title} ($
-                        {Number(p.plan.price_amount || 0).toFixed(2)})
+                    {subscriptionSKUs.map((sku) => (
+                      <SelectItem key={sku.id} value={String(sku.id)}>
+                        {sku.display_name} (¥
+                        {(sku.price_amount_minor / 100).toFixed(2)})
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -275,144 +253,152 @@ export function UserSubscriptionsDialog(props: Props) {
               </Select>
               <Button
                 onClick={handleCreate}
-                disabled={creating || !selectedPlanId}
+                disabled={creating || !selectedSKUId}
               >
-                <Plus className='mr-1 h-4 w-4' />
-                {t('Add subscription')}
+                <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+                {t("Add subscription")}
               </Button>
             </div>
 
             <StaticDataTable
-              data={loading ? [] : subs}
-              getRowKey={(record) => record.subscription.id}
-              emptyClassName={loading ? 'py-8' : 'text-muted-foreground py-8'}
+              data={loading ? [] : entitlements}
+              getRowKey={(entitlement) => entitlement.id}
+              emptyClassName={loading ? "py-8" : "text-muted-foreground py-8"}
               emptyContent={
-                loading ? t('Loading...') : t('No subscription records')
+                loading ? t("Loading...") : t("No subscription records")
               }
               columns={[
                 {
-                  id: 'id',
-                  header: t('ID'),
-                  cell: (record) => <TableId value={record.subscription.id} />,
+                  id: "id",
+                  header: t("ID"),
+                  cell: (entitlement) => <TableId value={entitlement.id} />,
                 },
                 {
-                  id: 'plan',
-                  header: t('Plan'),
-                  cell: (record) => {
-                    const sub = record.subscription
-
-                    return (
-                      <div>
-                        <div className='font-medium'>
-                          {planTitleMap.get(sub.plan_id) || `#${sub.plan_id}`}
-                        </div>
-                        <div className='text-muted-foreground text-sm'>
-                          {t('Source')}: {sub.source || '-'}
-                        </div>
+                  id: "subscription",
+                  header: t("Subscription"),
+                  cell: (entitlement) => (
+                    <div>
+                      <div className="font-medium">
+                        {skuMap.get(entitlement.sku_id)?.display_name ||
+                          typeMap.get(entitlement.entitlement_type_id)?.name ||
+                          `#${entitlement.id}`}
                       </div>
-                    )
-                  },
-                },
-                {
-                  id: 'status',
-                  header: t('Status'),
-                  cell: (record) => (
-                    <SubscriptionStatusBadge sub={record.subscription} t={t} />
+                      <div className="text-muted-foreground text-sm">
+                        {t("Source")}: {entitlement.source_type || "-"}
+                      </div>
+                    </div>
                   ),
                 },
                 {
-                  id: 'validity',
-                  header: t('Validity'),
-                  cell: (record) => {
-                    const sub = record.subscription
-
-                    return (
-                      <div className='text-sm'>
-                        <div>
-                          {t('Start')}: {formatTimestamp(sub.start_time)}
-                        </div>
-                        <div>
-                          {t('End')}: {formatTimestamp(sub.end_time)}
-                        </div>
+                  id: "status",
+                  header: t("Status"),
+                  cell: (entitlement) => (
+                    <StatusBadge
+                      label={t(entitlement.state)}
+                      variant={
+                        entitlement.state === "active" ? "success" : "neutral"
+                      }
+                      copyable={false}
+                    />
+                  ),
+                },
+                {
+                  id: "validity",
+                  header: t("Validity"),
+                  cell: (entitlement) => (
+                    <div className="text-sm">
+                      <div>
+                        {t("Start")}: {formatDate(entitlement.start_at)}
                       </div>
-                    )
-                  },
+                      <div>
+                        {t("End")}: {formatDate(entitlement.expire_at)}
+                      </div>
+                    </div>
+                  ),
                 },
                 {
-                  id: 'quota',
-                  header: t('Total Quota'),
-                  cell: (record) => {
-                    const sub = record.subscription
-                    const total = Number(sub.amount_total || 0)
-                    const used = Number(sub.amount_used || 0)
-                    return total > 0
-                      ? `${formatQuota(used)}/${formatQuota(total)}`
-                      : t('Unlimited')
-                  },
+                  id: "quota",
+                  header: t("Remaining quota"),
+                  cell: (entitlement) => (
+                    <div className="text-sm">
+                      <div>
+                        {formatQuota(
+                          Math.max(
+                            0,
+                            entitlement.total_quota -
+                              entitlement.used_quota -
+                              entitlement.reserved_quota,
+                          ),
+                        )}
+                      </div>
+                      <div className="text-muted-foreground">
+                        {formatQuota(entitlement.used_quota)} /{" "}
+                        {formatQuota(entitlement.total_quota)}
+                      </div>
+                      <div className="text-muted-foreground">
+                        {t("Daily quota")}:{" "}
+                        {entitlement.daily_quota > 0
+                          ? formatQuota(entitlement.daily_quota)
+                          : t("Unlimited")}
+                      </div>
+                    </div>
+                  ),
                 },
                 {
-                  id: 'actions',
-                  header: t('Actions'),
-                  className: 'text-right',
-                  cellClassName: 'text-right',
-                  cell: (record) => {
-                    const sub = record.subscription
-                    const now = Date.now() / 1000
-                    const isExpired =
-                      (sub.end_time || 0) > 0 && sub.end_time < now
-                    const isActive = sub.status === 'active' && !isExpired
-
-                    return (
-                      <DataTableRowActionMenu ariaLabel={t('Actions')}>
+                  id: "actions",
+                  header: t("Actions"),
+                  className: "text-right",
+                  cellClassName: "text-right",
+                  cell: (entitlement) => (
+                    <DataTableRowActionMenu ariaLabel={t("Actions")}>
+                      {entitlement.state === "active" ? (
                         <DropdownMenuItem
-                          disabled={!isActive}
-                          onClick={() => {
-                            setAdvanceResetTime(true)
-                            setResetAction({
-                              planId: sub.plan_id,
-                              planTitle:
-                                planTitleMap.get(sub.plan_id) ||
-                                `#${sub.plan_id}`,
-                            })
-                          }}
-                        >
-                          {t('Reset quota')}
-                          <DropdownMenuShortcut>
-                            <RotateCcw size={16} />
-                          </DropdownMenuShortcut>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={!isActive}
                           onClick={() =>
-                            setConfirmAction({
-                              type: 'invalidate',
-                              subId: sub.id,
+                            setPendingAction({
+                              type: "pause",
+                              entitlementId: entitlement.id,
                             })
                           }
                         >
-                          {t('Invalidate')}
+                          {t("Pause")}
                           <DropdownMenuShortcut>
-                            <Ban size={16} />
+                            <Pause size={16} />
                           </DropdownMenuShortcut>
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
+                      ) : null}
+                      {entitlement.state === "paused" ? (
                         <DropdownMenuItem
-                          variant='destructive'
                           onClick={() =>
-                            setConfirmAction({
-                              type: 'delete',
-                              subId: sub.id,
+                            setPendingAction({
+                              type: "resume",
+                              entitlementId: entitlement.id,
                             })
                           }
                         >
-                          {t('Delete')}
+                          {t("Resume")}
                           <DropdownMenuShortcut>
-                            <Trash2 size={16} />
+                            <Play size={16} />
                           </DropdownMenuShortcut>
                         </DropdownMenuItem>
-                      </DataTableRowActionMenu>
-                    )
-                  },
+                      ) : null}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        disabled={entitlement.state === "cancelled"}
+                        onClick={() =>
+                          setPendingAction({
+                            type: "revoke",
+                            entitlementId: entitlement.id,
+                          })
+                        }
+                      >
+                        {t("Revoke")}
+                        <DropdownMenuShortcut>
+                          <Ban size={16} />
+                        </DropdownMenuShortcut>
+                      </DropdownMenuItem>
+                    </DataTableRowActionMenu>
+                  ),
                 },
               ]}
             />
@@ -420,51 +406,17 @@ export function UserSubscriptionsDialog(props: Props) {
         </SheetContent>
       </Sheet>
 
-      {confirmAction && (
+      {pendingAction ? (
         <ConfirmDialog
           open
-          onOpenChange={(v) => !v && setConfirmAction(null)}
-          title={
-            confirmAction.type === 'invalidate'
-              ? t('Confirm invalidate')
-              : t('Confirm delete')
-          }
-          desc={
-            confirmAction.type === 'invalidate'
-              ? t(
-                  'After invalidating, this subscription will be immediately deactivated. Historical records are not affected. Continue?'
-                )
-              : t(
-                  'Deleting will permanently remove this subscription record (including benefit details). Continue?'
-                )
-          }
+          onOpenChange={(open) => !open && setPendingAction(null)}
+          title={actionTitle}
+          desc={actionDescription}
+          confirmText={actionConfirmText}
           handleConfirm={handleConfirmAction}
-          destructive={confirmAction.type === 'delete'}
+          destructive={pendingAction.type === "revoke"}
         />
-      )}
-
-      {resetAction && (
-        <ConfirmDialog
-          open
-          onOpenChange={(v) => !v && setResetAction(null)}
-          title={t('Reset subscription quota')}
-          desc={t('Reset active {{plan}} subscriptions for this user?', {
-            plan: resetAction.planTitle,
-          })}
-          confirmText={t('Reset quota')}
-          handleConfirm={handleResetConfirm}
-          isLoading={resetting}
-        >
-          <label className='flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm'>
-            <span>{t('Advance next reset time')}</span>
-            <Switch
-              checked={advanceResetTime}
-              onCheckedChange={(checked) => setAdvanceResetTime(!!checked)}
-              aria-label={t('Advance next reset time')}
-            />
-          </label>
-        </ConfirmDialog>
-      )}
+      ) : null}
     </>
-  )
+  );
 }

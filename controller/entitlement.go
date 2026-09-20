@@ -445,6 +445,25 @@ func AdminUpdateProductSKU(c *gin.Context) {
 	common.ApiSuccess(c, sku)
 }
 
+func AdminDeleteProductSKU(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if id <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	var sku model.ProductSKU
+	if err := model.DB.Where("id = ?", id).First(&sku).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.DeleteProductSKU(id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "entitlement.sku_delete", map[string]interface{}{"id": id, "code": sku.Code})
+	common.ApiSuccess(c, nil)
+}
+
 func ListStoreProducts(c *gin.Context) {
 	var products []model.Product
 	if err := model.DB.Preload("SKUs", "status = ?", model.ProductStatusActive).
@@ -966,6 +985,26 @@ func AdminGrantEntitlement(c *gin.Context) {
 	common.ApiSuccess(c, request)
 }
 
+type grantProductSKUEntitlementRequest struct {
+	SKUId int `json:"sku_id"`
+}
+
+func AdminGrantProductSKUEntitlement(c *gin.Context) {
+	userId, _ := strconv.Atoi(c.Param("id"))
+	var request grantProductSKUEntitlementRequest
+	if userId <= 0 || c.ShouldBindJSON(&request) != nil || request.SKUId <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	entitlement, err := model.GrantProductSKUEntitlement(userId, request.SKUId, c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAuditFor(c, userId, "entitlement.grant", map[string]interface{}{"id": entitlement.Id, "sku_id": request.SKUId})
+	common.ApiSuccess(c, entitlement)
+}
+
 type adjustEntitlementRequest struct {
 	DeltaQuota     int64  `json:"delta_quota"`
 	Reason         string `json:"reason"`
@@ -1013,6 +1052,34 @@ func AdminRevokeEntitlement(c *gin.Context) {
 		return
 	}
 	recordManageAudit(c, "entitlement.revoke", map[string]interface{}{"id": id})
+	common.ApiSuccess(c, nil)
+}
+
+func AdminPauseEntitlement(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if id <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if err := model.PauseEntitlement(id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "entitlement.pause", map[string]interface{}{"id": id})
+	common.ApiSuccess(c, nil)
+}
+
+func AdminResumeEntitlement(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if id <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	if err := model.ResumeEntitlement(id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAudit(c, "entitlement.resume", map[string]interface{}{"id": id})
 	common.ApiSuccess(c, nil)
 }
 
